@@ -2,10 +2,12 @@ import GObject from 'gi://GObject';
 import GLib from 'gi://GLib';
 import St from 'gi://St';
 import Clutter from 'gi://Clutter';
+import Pango from 'gi://Pango';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import { Extension, gettext as _ } from 'resource:///org/gnome/shell/extensions/extension.js';
+import { loadPresets, DEFAULT_PRESETS } from './presetsConfig.js';
 
 const TimerState = {
     IDLE: 'idle',
@@ -13,17 +15,6 @@ const TimerState = {
     PAUSED: 'paused',
     FINISHED: 'finished',
 };
-
-const PRESETS = [
-    { label: '1 min', seconds: 60 },
-    { label: '5 min', seconds: 300 },
-    { label: '10 min', seconds: 600 },
-    { label: '15 min', seconds: 900 },
-    { label: '25 min (Pomodoro)', seconds: 1500 },
-    { label: '30 min', seconds: 1800 },
-    { label: '45 min', seconds: 2700 },
-    { label: '60 min', seconds: 3600 },
-];
 
 function formatTime(totalSeconds) {
     const s = Math.max(0, Math.floor(totalSeconds));
@@ -50,10 +41,20 @@ class TimerIndicator extends PanelMenu.Button {
         this._state = TimerState.IDLE;
         this._timeoutId = null;
         this._endTime = 0;
+        this._presets = [];
 
         this._buildPanelWidget();
         this._buildPopupMenu();
+        this._reloadPresets();
         this._updateUI();
+
+        // Reload presets dynamically whenever popup opens
+        this.menu.connect('open-state-changed', (_menu, isOpen) => {
+            if (isOpen) {
+                this._reloadPresets();
+                this._updateUI();
+            }
+        });
     }
 
     _buildPanelWidget() {
@@ -72,6 +73,7 @@ class TimerIndicator extends PanelMenu.Button {
             y_align: Clutter.ActorAlign.CENTER,
             style_class: 'tary-timer-panel-label',
         });
+        this._panelLabel.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
 
         this._panelBox.add_child(this._panelIcon);
         this._panelBox.add_child(this._panelLabel);
@@ -98,12 +100,15 @@ class TimerIndicator extends PanelMenu.Button {
             style_class: 'tary-timer-large-display',
             x_align: Clutter.ActorAlign.CENTER,
         });
+        // Prevent any ellipsis truncation so seconds are always 100% visible
+        this._menuTimeLabel.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
 
         this._menuStatusLabel = new St.Label({
-            text: _('Ready to start'),
+            text: _('Ready'),
             style_class: 'tary-timer-status-text',
             x_align: Clutter.ActorAlign.CENTER,
         });
+        this._menuStatusLabel.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
 
         headerBox.add_child(this._menuTimeLabel);
         headerBox.add_child(this._menuStatusLabel);
@@ -145,50 +150,196 @@ class TimerIndicator extends PanelMenu.Button {
         controlItem.add_child(controlBox);
         this.menu.addMenuItem(controlItem);
 
-        // 3. Quick Adjustments (+ / -)
-        const adjustItem = new PopupMenu.PopupBaseMenuItem({
+        // 3. GNOME Clocks Style Time Picker (Hours : Minutes : Seconds with +/-)
+        const pickerItem = new PopupMenu.PopupBaseMenuItem({
             reactive: false,
             can_focus: false,
         });
 
-        const adjustBox = new St.BoxLayout({
+        const pickerContainer = new St.BoxLayout({
             x_expand: true,
             x_align: Clutter.ActorAlign.CENTER,
-            style_class: 'tary-timer-adjust-box',
+            style_class: 'tary-picker-container',
         });
 
-        const adjustments = [
-            { label: '-5m', seconds: -300 },
-            { label: '-1m', seconds: -60 },
-            { label: '+1m', seconds: 60 },
-            { label: '+5m', seconds: 300 },
-            { label: '+10m', seconds: 600 },
-        ];
+        // Hours Column
+        const hoursCol = this._createPickerColumn('hours');
+        this._hoursLabel = hoursCol.digitLabel;
 
-        adjustments.forEach(adj => {
-            const btn = new St.Button({
-                label: adj.label,
-                style_class: 'button tary-timer-btn-small',
-                can_focus: true,
-                reactive: true,
-            });
-            btn.connect('clicked', () => this._adjustTime(adj.seconds));
-            adjustBox.add_child(btn);
+        // Colon 1
+        const colon1 = new St.Label({
+            text: ':',
+            style_class: 'tary-picker-colon',
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        colon1.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
+
+        // Minutes Column
+        const minutesCol = this._createPickerColumn('minutes');
+        this._minutesLabel = minutesCol.digitLabel;
+
+        // Colon 2
+        const colon2 = new St.Label({
+            text: ':',
+            style_class: 'tary-picker-colon',
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        colon2.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
+
+        // Seconds Column
+        const secondsCol = this._createPickerColumn('seconds');
+        this._secondsLabel = secondsCol.digitLabel;
+
+        pickerContainer.add_child(hoursCol.box);
+        pickerContainer.add_child(colon1);
+        pickerContainer.add_child(minutesCol.box);
+        pickerContainer.add_child(colon2);
+        pickerContainer.add_child(secondsCol.box);
+
+        pickerItem.add_child(pickerContainer);
+        this.menu.addMenuItem(pickerItem);
+
+        // 4. Presets Section Header with Pen/Edit Icon
+        const presetsHeaderItem = new PopupMenu.PopupBaseMenuItem({
+            reactive: false,
+            can_focus: false,
+            style_class: 'tary-timer-presets-header-item',
         });
 
-        adjustItem.add_child(adjustBox);
-        this.menu.addMenuItem(adjustItem);
+        const presetsHeaderBox = new St.BoxLayout({
+            x_expand: true,
+            y_align: Clutter.ActorAlign.CENTER,
+            style_class: 'tary-timer-presets-header-box',
+        });
 
-        // Separator
-        this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem(_('Presets')));
+        const presetsTitle = new St.Label({
+            text: _('Presets'),
+            style_class: 'tary-timer-section-title',
+            y_align: Clutter.ActorAlign.CENTER,
+        });
 
-        // 4. Preset Buttons in a 2-column grid
-        for (let i = 0; i < PRESETS.length; i += 2) {
-            const rowItem = new PopupMenu.PopupBaseMenuItem({
-                reactive: false,
-                can_focus: false,
-            });
+        const spacer = new St.Widget({ x_expand: true });
 
+        const editPenBtn = new St.Button({
+            style_class: 'button tary-timer-edit-btn',
+            can_focus: true,
+            reactive: true,
+            child: new St.Icon({
+                icon_name: 'document-edit-symbolic',
+                icon_size: 15,
+                style_class: 'tary-timer-edit-icon',
+            }),
+        });
+
+        editPenBtn.connect('clicked', () => {
+            this.menu.close();
+            this._extension.openPreferences();
+        });
+
+        presetsHeaderBox.add_child(presetsTitle);
+        presetsHeaderBox.add_child(spacer);
+        presetsHeaderBox.add_child(editPenBtn);
+        presetsHeaderItem.add_child(presetsHeaderBox);
+        this.menu.addMenuItem(presetsHeaderItem);
+
+        // 5. Presets Container (First 4 presets only)
+        this._presetsContainer = new St.BoxLayout({
+            vertical: true,
+            x_expand: true,
+        });
+
+        const presetsItem = new PopupMenu.PopupBaseMenuItem({
+            reactive: false,
+            can_focus: false,
+        });
+        presetsItem.add_child(this._presetsContainer);
+        this.menu.addMenuItem(presetsItem);
+    }
+
+    _createPickerColumn(unit) {
+        const box = new St.BoxLayout({
+            vertical: true,
+            style_class: 'tary-picker-column',
+            x_align: Clutter.ActorAlign.CENTER,
+        });
+
+        const plusBtn = new St.Button({
+            label: '+',
+            style_class: 'button tary-picker-btn tary-picker-btn-plus',
+            can_focus: true,
+            reactive: true,
+        });
+        plusBtn.connect('clicked', () => this._onPickerAdjust(unit, 1));
+
+        const digitCard = new St.BoxLayout({
+            style_class: 'tary-picker-digit-card',
+            x_align: Clutter.ActorAlign.CENTER,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+
+        const digitLabel = new St.Label({
+            text: '00',
+            style_class: 'tary-picker-digit-label',
+            x_align: Clutter.ActorAlign.CENTER,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        digitLabel.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
+        digitCard.add_child(digitLabel);
+
+        const minusBtn = new St.Button({
+            label: '−',
+            style_class: 'button tary-picker-btn tary-picker-btn-minus',
+            can_focus: true,
+            reactive: true,
+        });
+        minusBtn.connect('clicked', () => this._onPickerAdjust(unit, -1));
+
+        box.add_child(plusBtn);
+        box.add_child(digitCard);
+        box.add_child(minusBtn);
+
+        return { box, digitLabel };
+    }
+
+    _onPickerAdjust(unit, delta) {
+        let h = Math.floor(this._remainingSeconds / 3600);
+        let m = Math.floor((this._remainingSeconds % 3600) / 60);
+        let s = this._remainingSeconds % 60;
+
+        if (unit === 'hours') {
+            h = (h + delta + 24) % 24;
+        } else if (unit === 'minutes') {
+            m = (m + delta + 60) % 60;
+        } else if (unit === 'seconds') {
+            s = (s + delta + 60) % 60;
+        }
+
+        const newTotal = (h * 3600) + (m * 60) + s;
+        this._remainingSeconds = newTotal;
+        this._totalSeconds = newTotal;
+
+        if (this._state === TimerState.RUNNING) {
+            this._endTime = Date.now() + (this._remainingSeconds * 1000);
+        } else if (this._state === TimerState.FINISHED) {
+            this._state = TimerState.IDLE;
+        }
+
+        this._updateUI();
+    }
+
+    _reloadPresets() {
+        this._presetsContainer.destroy_all_children();
+
+        const allPresets = loadPresets();
+        // Constrain strictly to first 4 presets as requested
+        this._presets = allPresets.slice(0, 4);
+
+        if (this._presets.length === 0) {
+            this._presets = DEFAULT_PRESETS.slice(0, 4);
+        }
+
+        // Render 2 rows of 2 presets
+        for (let i = 0; i < this._presets.length; i += 2) {
             const rowBox = new St.BoxLayout({
                 x_expand: true,
                 x_align: Clutter.ActorAlign.FILL,
@@ -196,9 +347,9 @@ class TimerIndicator extends PanelMenu.Button {
             });
 
             for (let j = 0; j < 2; j++) {
-                const presetIndex = i + j;
-                if (presetIndex < PRESETS.length) {
-                    const preset = PRESETS[presetIndex];
+                const idx = i + j;
+                if (idx < this._presets.length) {
+                    const preset = this._presets[idx];
                     const pBtn = new St.Button({
                         label: preset.label,
                         style_class: 'button tary-timer-preset-btn',
@@ -211,8 +362,7 @@ class TimerIndicator extends PanelMenu.Button {
                 }
             }
 
-            rowItem.add_child(rowBox);
-            this.menu.addMenuItem(rowItem);
+            this._presetsContainer.add_child(rowBox);
         }
     }
 
@@ -277,25 +427,6 @@ class TimerIndicator extends PanelMenu.Button {
         this._updateUI();
     }
 
-    _adjustTime(seconds) {
-        if (this._state === TimerState.FINISHED) {
-            this._state = TimerState.IDLE;
-        }
-
-        let newSeconds = this._remainingSeconds + seconds;
-        if (newSeconds < 5) newSeconds = 5;
-        if (newSeconds > 86400) newSeconds = 86400;
-
-        this._remainingSeconds = newSeconds;
-        this._totalSeconds = newSeconds;
-
-        if (this._state === TimerState.RUNNING) {
-            this._endTime = Date.now() + (this._remainingSeconds * 1000);
-        }
-
-        this._updateUI();
-    }
-
     _setPreset(seconds) {
         if (this._timeoutId) {
             GLib.source_remove(this._timeoutId);
@@ -336,7 +467,7 @@ class TimerIndicator extends PanelMenu.Button {
     _updateUI() {
         const timeStr = formatTime(this._remainingSeconds);
 
-        // 1. Update panel
+        // 1. Update top panel display
         this._panelLabel.set_text(timeStr);
 
         this._panelBox.remove_style_class_name('tary-timer-panel-running');
@@ -356,9 +487,21 @@ class TimerIndicator extends PanelMenu.Button {
             this._panelIcon.set_icon_name('alarm-symbolic');
         }
 
-        // 2. Update popup menu elements
+        // 2. Update large digital display
         this._menuTimeLabel.set_text(timeStr);
 
+        // 3. Update Clocks picker digits (Hours, Minutes, Seconds)
+        const s = Math.max(0, Math.floor(this._remainingSeconds));
+        const hours = Math.floor(s / 3600);
+        const minutes = Math.floor((s % 3600) / 60);
+        const seconds = s % 60;
+        const pad = (n) => n.toString().padStart(2, '0');
+
+        if (this._hoursLabel) this._hoursLabel.set_text(pad(hours));
+        if (this._minutesLabel) this._minutesLabel.set_text(pad(minutes));
+        if (this._secondsLabel) this._secondsLabel.set_text(pad(seconds));
+
+        // 4. Update status label & button styling
         switch (this._state) {
             case TimerState.RUNNING:
                 this._menuStatusLabel.set_text(_('Timer running...'));
@@ -410,4 +553,3 @@ export default class TaryTimerExtension extends Extension {
         }
     }
 }
-
