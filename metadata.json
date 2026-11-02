@@ -1,0 +1,17 @@
+{
+  "name": "Tary Timer",
+  "description": "A modern, sleek timer extension in the top panel status area for GNOME Shell.",
+  "uuid": "tary-timer@iamaymo.github.com",
+  "shell-version": [
+    "45",
+    "46",
+    "47",
+    "48",
+    "49",
+    "50",
+    "51"
+  ],
+  "version": 1,
+  "url": "https://github.com/iamaymo/tary_timer"
+}
+

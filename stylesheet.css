@@ -1,0 +1,131 @@
+/* Tary Timer GNOME Shell Extension Stylesheet */
+
+/* Panel Display */
+.tary-timer-panel-box {
+    spacing: 5px;
+}
+
+.tary-timer-panel-icon {
+    icon-size: 16px;
+    margin-right: 2px;
+}
+
+.tary-timer-panel-label {
+    font-weight: bold;
+    font-size: 11pt;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+}
+
+.tary-timer-panel-running .tary-timer-panel-label,
+.tary-timer-panel-running .tary-timer-panel-icon {
+    color: #3584e4;
+}
+
+.tary-timer-panel-paused .tary-timer-panel-label,
+.tary-timer-panel-paused .tary-timer-panel-icon {
+    color: #e66100;
+    opacity: 0.85;
+}
+
+.tary-timer-panel-finished .tary-timer-panel-label,
+.tary-timer-panel-finished .tary-timer-panel-icon {
+    color: #e01b24;
+}
+
+/* Dropdown Menu Header */
+.tary-timer-header-box {
+    padding: 10px 18px 8px 18px;
+}
+
+.tary-timer-large-display {
+    font-size: 30pt;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 1px;
+    margin-bottom: 2px;
+}
+
+.tary-timer-status-text {
+    font-size: 10pt;
+    opacity: 0.7;
+    font-weight: 500;
+}
+
+/* Control Buttons */
+.tary-timer-control-box {
+    spacing: 10px;
+    margin: 6px 14px;
+}
+
+.tary-timer-btn {
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-weight: bold;
+    font-size: 10.5pt;
+    text-align: center;
+}
+
+.tary-timer-btn-primary {
+    background-color: #3584e4;
+    color: #ffffff;
+}
+
+.tary-timer-btn-primary:hover {
+    background-color: #1c71d8;
+}
+
+.tary-timer-btn-warning {
+    background-color: #e66100;
+    color: #ffffff;
+}
+
+.tary-timer-btn-warning:hover {
+    background-color: #c64600;
+}
+
+.tary-timer-btn-secondary {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.tary-timer-btn-secondary:hover {
+    background-color: rgba(255, 255, 255, 0.18);
+}
+
+/* Adjustment Buttons */
+.tary-timer-adjust-box {
+    spacing: 6px;
+    margin: 6px 14px;
+}
+
+.tary-timer-btn-small {
+    font-size: 9.5pt;
+    font-weight: 600;
+    border-radius: 6px;
+    padding: 4px 8px;
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.tary-timer-btn-small:hover {
+    background-color: rgba(255, 255, 255, 0.16);
+}
+
+/* Preset Buttons Grid */
+.tary-timer-preset-row {
+    spacing: 8px;
+    margin: 3px 14px;
+}
+
+.tary-timer-preset-btn {
+    font-size: 9.5pt;
+    font-weight: 500;
+    border-radius: 6px;
+    padding: 6px 10px;
+    background-color: rgba(255, 255, 255, 0.06);
+    text-align: center;
+}
+
+.tary-timer-preset-btn:hover {
+    background-color: rgba(255, 255, 255, 0.14);
+}
+
