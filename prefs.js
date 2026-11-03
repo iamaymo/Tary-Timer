@@ -28,7 +28,7 @@ function playSoundPreview(soundConfig) {
             GLib.spawn_command_line_async(`canberra-gtk-play -i "${soundOpt.id}"`);
         }
     } else {
-        GLib.spawn_command_line_async(`canberra-gtk-play -i alarm-clock-elapsed`);
+        GLib.spawn_command_line_async(`canberra-gtk-play -i complete`);
     }
 }
 
@@ -173,7 +173,7 @@ export default class TaryTimerPreferences extends ExtensionPreferences {
         SOUND_OPTIONS.forEach(s => soundStrings.append(_(s.label)));
 
         // Determine currently selected sound index
-        let curSoundId = config.sound?.customPath ? 'custom' : (config.sound?.themeName || 'alarm-clock-elapsed');
+        let curSoundId = config.sound?.customPath ? 'custom' : (config.sound?.themeName || 'complete');
         if (config.sound?.type === 'none') curSoundId = 'none';
 
         let curSoundIdx = SOUND_OPTIONS.findIndex(s => s.id === curSoundId);

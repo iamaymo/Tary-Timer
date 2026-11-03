@@ -585,7 +585,7 @@ class TimerIndicator extends PanelMenu.Button {
                 }
             }
 
-            const themeName = sound.themeName || 'alarm-clock-elapsed';
+            const themeName = sound.themeName || 'complete';
             const player = global.display.get_sound_player();
             if (player) {
                 player.play_from_theme(themeName, _('Timer Finished'), null);

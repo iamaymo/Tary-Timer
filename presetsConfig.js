@@ -2,7 +2,7 @@ import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
 
 export const DEFAULT_CONFIG = {
-    position: 'left', // 'middle-left' | 'middle-right' | 'left' | 'right'
+    position: 'middle-left', // 'middle-left' | 'middle-right' | 'left' | 'right'
     presets: [
         { label: '1 min', seconds: 60 },
         { label: '5 min', seconds: 300 },
@@ -11,7 +11,7 @@ export const DEFAULT_CONFIG = {
     ],
     sound: {
         type: 'theme', // 'theme' | 'custom' | 'none'
-        themeName: 'alarm-clock-elapsed',
+        themeName: 'complete',
         customPath: '',
         customName: '',
     },
