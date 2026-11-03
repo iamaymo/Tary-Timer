@@ -1,5 +1,6 @@
 import GObject from 'gi://GObject';
 import GLib from 'gi://GLib';
+import Gio from 'gi://Gio';
 import St from 'gi://St';
 import Clutter from 'gi://Clutter';
 import Pango from 'gi://Pango';
@@ -7,7 +8,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import { Extension, gettext as _ } from 'resource:///org/gnome/shell/extensions/extension.js';
-import { loadPresets, DEFAULT_PRESETS } from './presetsConfig.js';
+import { loadConfig, DEFAULT_CONFIG } from './presetsConfig.js';
 
 const TimerState = {
     IDLE: 'idle',
@@ -42,16 +43,18 @@ class TimerIndicator extends PanelMenu.Button {
         this._timeoutId = null;
         this._endTime = 0;
         this._presets = [];
+        this._isEditing = false;
+        this._isSyncingUI = false;
 
         this._buildPanelWidget();
         this._buildPopupMenu();
-        this._reloadPresets();
+        this.reloadConfig();
         this._updateUI();
 
         // Reload presets dynamically whenever popup opens
         this.menu.connect('open-state-changed', (_menu, isOpen) => {
             if (isOpen) {
-                this._reloadPresets();
+                this.reloadConfig();
                 this._updateUI();
             }
         });
@@ -81,14 +84,26 @@ class TimerIndicator extends PanelMenu.Button {
     }
 
     _buildPopupMenu() {
-        // 1. Digital Display Header
+        // 1. Digital Display Header with Gear Icon on top-right
         const headerItem = new PopupMenu.PopupBaseMenuItem({
             reactive: false,
             can_focus: false,
             style_class: 'tary-timer-header-item',
         });
 
-        const headerBox = new St.BoxLayout({
+        const headerRow = new St.BoxLayout({
+            x_expand: true,
+            y_align: Clutter.ActorAlign.CENTER,
+            style_class: 'tary-timer-header-row',
+        });
+
+        // Left spacer for symmetric center balance
+        const leftSpacer = new St.Widget({
+            width: 28,
+            reactive: false,
+        });
+
+        const centerBox = new St.BoxLayout({
             vertical: true,
             x_expand: true,
             x_align: Clutter.ActorAlign.CENTER,
@@ -100,7 +115,6 @@ class TimerIndicator extends PanelMenu.Button {
             style_class: 'tary-timer-large-display',
             x_align: Clutter.ActorAlign.CENTER,
         });
-        // Prevent any ellipsis truncation so seconds are always 100% visible
         this._menuTimeLabel.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
 
         this._menuStatusLabel = new St.Label({
@@ -110,9 +124,31 @@ class TimerIndicator extends PanelMenu.Button {
         });
         this._menuStatusLabel.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
 
-        headerBox.add_child(this._menuTimeLabel);
-        headerBox.add_child(this._menuStatusLabel);
-        headerItem.add_child(headerBox);
+        centerBox.add_child(this._menuTimeLabel);
+        centerBox.add_child(this._menuStatusLabel);
+
+        // Top-right Gear Button to open extension settings
+        const gearBtn = new St.Button({
+            style_class: 'button tary-timer-gear-btn',
+            can_focus: true,
+            reactive: true,
+            y_align: Clutter.ActorAlign.CENTER,
+            child: new St.Icon({
+                icon_name: 'emblem-system-symbolic',
+                icon_size: 16,
+                style_class: 'tary-timer-gear-icon',
+            }),
+        });
+
+        gearBtn.connect('clicked', () => {
+            this.menu.close();
+            this._extension.openPreferences();
+        });
+
+        headerRow.add_child(leftSpacer);
+        headerRow.add_child(centerBox);
+        headerRow.add_child(gearBtn);
+        headerItem.add_child(headerRow);
         this.menu.addMenuItem(headerItem);
 
         // 2. Play / Pause & Reset Controls
@@ -277,7 +313,6 @@ class TimerIndicator extends PanelMenu.Button {
             y_align: Clutter.ActorAlign.CENTER,
         });
 
-        // Editable Entry allowing keyboard input
         const digitEntry = new St.Entry({
             text: '00',
             style_class: 'tary-picker-digit-entry',
@@ -291,19 +326,32 @@ class TimerIndicator extends PanelMenu.Button {
         digitEntry.clutter_text.set_line_alignment(Pango.Alignment.CENTER);
         digitEntry.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
 
+        digitEntry.clutter_text.connect('key-focus-in', () => {
+            this._isEditing = true;
+        });
+
         digitEntry.clutter_text.connect('text-changed', () => {
-            if (digitEntry.has_key_focus()) {
-                this._onDigitInputChanged(unit, digitEntry.get_text());
-            }
+            if (this._isSyncingUI) return;
+            this._isEditing = true;
+            this._onUserInput(unit);
         });
 
         digitEntry.clutter_text.connect('key-focus-out', () => {
-            this._formatDigitEntry(unit);
+            this._commitUserInput(unit);
+            this._isEditing = false;
         });
 
         digitEntry.clutter_text.connect('activate', () => {
-            this._formatDigitEntry(unit);
-            this.menu.actor.grab_key_focus();
+            this._commitUserInput(unit);
+            this._isEditing = false;
+
+            if (unit === 'hours' && this._minutesEntry) {
+                this._minutesEntry.clutter_text.grab_key_focus();
+            } else if (unit === 'minutes' && this._secondsEntry) {
+                this._secondsEntry.clutter_text.grab_key_focus();
+            } else {
+                this.menu.actor.grab_key_focus();
+            }
         });
 
         digitCard.add_child(digitEntry);
@@ -323,26 +371,22 @@ class TimerIndicator extends PanelMenu.Button {
         return { box, digitEntry };
     }
 
-    _onDigitInputChanged(unit, rawText) {
-        const cleanText = rawText.replace(/[^0-9]/g, '');
-        let val = parseInt(cleanText, 10);
-        if (isNaN(val)) val = 0;
+    _onUserInput(unit) {
+        const hText = this._hoursEntry ? this._hoursEntry.get_text().replace(/\D/g, '') : '';
+        const mText = this._minutesEntry ? this._minutesEntry.get_text().replace(/\D/g, '') : '';
+        const sText = this._secondsEntry ? this._secondsEntry.get_text().replace(/\D/g, '') : '';
 
-        let h = Math.floor(this._remainingSeconds / 3600);
-        let m = Math.floor((this._remainingSeconds % 3600) / 60);
-        let s = this._remainingSeconds % 60;
+        let h = hText ? parseInt(hText, 10) : 0;
+        let m = mText ? parseInt(mText, 10) : 0;
+        let s = sText ? parseInt(sText, 10) : 0;
 
-        if (unit === 'hours') {
-            h = Math.min(23, Math.max(0, val));
-        } else if (unit === 'minutes') {
-            m = Math.min(59, Math.max(0, val));
-        } else if (unit === 'seconds') {
-            s = Math.min(59, Math.max(0, val));
-        }
+        h = Math.min(23, Math.max(0, h));
+        m = Math.min(59, Math.max(0, m));
+        s = Math.min(59, Math.max(0, s));
 
-        const newTotal = (h * 3600) + (m * 60) + s;
-        this._remainingSeconds = newTotal;
-        this._totalSeconds = newTotal;
+        const total = (h * 3600) + (m * 60) + s;
+        this._remainingSeconds = total;
+        this._totalSeconds = total;
 
         if (this._state === TimerState.FINISHED) {
             this._state = TimerState.IDLE;
@@ -353,20 +397,20 @@ class TimerIndicator extends PanelMenu.Button {
         this._menuTimeLabel.set_text(timeStr);
     }
 
-    _formatDigitEntry(unit) {
+    _commitUserInput(unit) {
+        this._onUserInput(unit);
+
         const s = Math.max(0, Math.floor(this._remainingSeconds));
         const hours = Math.floor(s / 3600);
         const minutes = Math.floor((s % 3600) / 60);
         const seconds = s % 60;
         const pad = (n) => n.toString().padStart(2, '0');
 
-        if (unit === 'hours' && this._hoursEntry) {
-            this._hoursEntry.set_text(pad(hours));
-        } else if (unit === 'minutes' && this._minutesEntry) {
-            this._minutesEntry.set_text(pad(minutes));
-        } else if (unit === 'seconds' && this._secondsEntry) {
-            this._secondsEntry.set_text(pad(seconds));
-        }
+        this._isSyncingUI = true;
+        if (this._hoursEntry) this._hoursEntry.set_text(pad(hours));
+        if (this._minutesEntry) this._minutesEntry.set_text(pad(minutes));
+        if (this._secondsEntry) this._secondsEntry.set_text(pad(seconds));
+        this._isSyncingUI = false;
     }
 
     _onPickerAdjust(unit, delta) {
@@ -395,18 +439,13 @@ class TimerIndicator extends PanelMenu.Button {
         this._updateUI();
     }
 
-    _reloadPresets() {
+    reloadConfig() {
         this._presetsContainer.destroy_all_children();
 
-        const allPresets = loadPresets();
-        // Constrain strictly to first 4 presets as requested
+        const config = loadConfig();
+        const allPresets = config.presets || DEFAULT_CONFIG.presets;
         this._presets = allPresets.slice(0, 4);
 
-        if (this._presets.length === 0) {
-            this._presets = DEFAULT_PRESETS.slice(0, 4);
-        }
-
-        // Render 2 rows of 2 presets
         for (let i = 0; i < this._presets.length; i += 2) {
             const rowBox = new St.BoxLayout({
                 x_expand: true,
@@ -439,7 +478,6 @@ class TimerIndicator extends PanelMenu.Button {
             this._pauseTimer();
         } else {
             this._startTimer();
-            // Automatically close the popup window upon starting
             this.menu.close();
         }
     }
@@ -561,20 +599,18 @@ class TimerIndicator extends PanelMenu.Button {
         this._menuTimeLabel.set_text(timeStr);
 
         // 3. Update Clocks picker digits only if not currently focused by user
-        const s = Math.max(0, Math.floor(this._remainingSeconds));
-        const hours = Math.floor(s / 3600);
-        const minutes = Math.floor((s % 3600) / 60);
-        const seconds = s % 60;
-        const pad = (n) => n.toString().padStart(2, '0');
+        if (!this._isEditing) {
+            const s = Math.max(0, Math.floor(this._remainingSeconds));
+            const hours = Math.floor(s / 3600);
+            const minutes = Math.floor((s % 3600) / 60);
+            const seconds = s % 60;
+            const pad = (n) => n.toString().padStart(2, '0');
 
-        if (this._hoursEntry && !this._hoursEntry.has_key_focus()) {
-            this._hoursEntry.set_text(pad(hours));
-        }
-        if (this._minutesEntry && !this._minutesEntry.has_key_focus()) {
-            this._minutesEntry.set_text(pad(minutes));
-        }
-        if (this._secondsEntry && !this._secondsEntry.has_key_focus()) {
-            this._secondsEntry.set_text(pad(seconds));
+            this._isSyncingUI = true;
+            if (this._hoursEntry) this._hoursEntry.set_text(pad(hours));
+            if (this._minutesEntry) this._minutesEntry.set_text(pad(minutes));
+            if (this._secondsEntry) this._secondsEntry.set_text(pad(seconds));
+            this._isSyncingUI = false;
         }
 
         // 4. Update status label & button styling
@@ -618,12 +654,84 @@ class TimerIndicator extends PanelMenu.Button {
 
 export default class TaryTimerExtension extends Extension {
     enable() {
+        this._config = loadConfig();
         this._indicator = new TimerIndicator(this);
-        // Position 1 in 'left' box places the indicator right next to Spaces/Workspaces on the left side
+
+        // Register initial status area indicator
         Main.panel.addToStatusArea(this.uuid, this._indicator, 1, 'left');
+        // Apply user-configured placement
+        this.applyPosition(this._config.position);
+
+        // Dynamic config file monitor for real-time position and preset updates
+        try {
+            const configDir = GLib.build_filenamev([GLib.get_user_config_dir(), 'tary-timer']);
+            const configFile = Gio.File.new_for_path(GLib.build_filenamev([configDir, 'config.json']));
+            this._monitor = configFile.monitor_file(Gio.FileMonitorFlags.NONE, null);
+            this._monitor.connect('changed', (_mon, _file, _other, eventType) => {
+                if (eventType === Gio.FileMonitorEvent.CHANGES_DONE_HINT ||
+                    eventType === Gio.FileMonitorEvent.CHANGED) {
+                    this._onConfigChanged();
+                }
+            });
+        } catch (e) {
+            console.error(`Tary Timer: config monitor error: ${e}`);
+        }
+    }
+
+    applyPosition(position) {
+        if (!this._indicator) return;
+
+        const currentParent = this._indicator.get_parent();
+        if (currentParent) {
+            currentParent.remove_child(this._indicator);
+        }
+
+        let container;
+        let pos = 1;
+
+        switch (position) {
+            case 'middle-left':
+                // Center box, left of the clock/calendar
+                container = Main.panel._centerBox;
+                pos = 0;
+                break;
+            case 'middle-right':
+                // Center box, right of the clock/calendar
+                container = Main.panel._centerBox;
+                pos = -1;
+                break;
+            case 'right':
+                // Right box, to the right after GPU/CPU monitors
+                container = Main.panel._rightBox;
+                pos = -1;
+                break;
+            case 'left':
+            default:
+                // Left box, right after Spaces / workspace indicators
+                container = Main.panel._leftBox;
+                pos = 1;
+                break;
+        }
+
+        container.insert_child_at_index(this._indicator, pos);
+    }
+
+    _onConfigChanged() {
+        const newConfig = loadConfig();
+        if (newConfig.position !== this._config.position) {
+            this._config.position = newConfig.position;
+            this.applyPosition(newConfig.position);
+        }
+        if (this._indicator) {
+            this._indicator.reloadConfig();
+        }
     }
 
     disable() {
+        if (this._monitor) {
+            this._monitor.cancel();
+            this._monitor = null;
+        }
         if (this._indicator) {
             this._indicator.destroy();
             this._indicator = null;

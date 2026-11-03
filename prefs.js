@@ -6,10 +6,10 @@ import { ExtensionPreferences, gettext as _ } from 'resource:///org/gnome/Shell/
 import { loadConfig, saveConfig, DEFAULT_CONFIG } from './presetsConfig.js';
 
 const POSITIONS = [
-    { id: 'left', label: 'Left (يسار - بعد مساحات العمل Spaces)' },
-    { id: 'middle-left', label: 'Middle-Left (وسط - يسار الساعة)' },
-    { id: 'middle-right', label: 'Middle-Right (وسط - يمين الساعة)' },
-    { id: 'right', label: 'Right (يمين - بعد مؤشرات النظام والمعالج)' },
+    { id: 'left', label: 'Left' },
+    { id: 'middle-left', label: 'Middle-Left' },
+    { id: 'middle-right', label: 'Middle-Right' },
+    { id: 'right', label: 'Right' },
 ];
 
 export default class TaryTimerPreferences extends ExtensionPreferences {

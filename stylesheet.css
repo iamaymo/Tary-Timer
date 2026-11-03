@@ -32,11 +32,19 @@
 }
 
 /* ==========================================================================
-   Dropdown Header & Digital Display
+   Dropdown Header & Digital Display with Gear Icon
    ========================================================================== */
+.tary-timer-header-item {
+    padding: 6px 14px 4px 14px;
+}
+
+.tary-timer-header-row {
+    spacing: 4px;
+}
+
 .tary-timer-header-box {
-    padding: 6px 16px 4px 16px;
-    min-width: 250px;
+    padding: 2px 8px;
+    min-width: 200px;
 }
 
 .tary-timer-large-display {
@@ -51,6 +59,24 @@
     font-size: 9.5pt;
     opacity: 0.7;
     font-weight: 500;
+    text-align: center;
+}
+
+.tary-timer-gear-btn {
+    border-radius: 9999px;
+    padding: 6px;
+    min-width: 28px;
+    min-height: 28px;
+    background-color: transparent;
+    border: none;
+}
+
+.tary-timer-gear-btn:hover {
+    background-color: rgba(255, 255, 255, 0.15);
+}
+
+.tary-timer-gear-icon {
+    icon-size: 16px;
 }
 
 /* ==========================================================================
@@ -96,7 +122,7 @@
 }
 
 /* ==========================================================================
-   GNOME Clocks Style Time Picker (Editable)
+   GNOME Clocks Style Time Picker (Editable Input)
    ========================================================================== */
 .tary-picker-container {
     margin: 8px 14px;

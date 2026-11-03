@@ -6,12 +6,16 @@ A sleek, modern timer extension for GNOME Shell (45 to 51+) utilizing ESM (ECMAS
 
 ## Features
 
-- **Top Panel Indicator**: Real-time countdown display with state icons (Running, Paused, Finished).
-- **GNOME Clocks Style Time Picker**: Sleek 3-column picker (Hours : Minutes : Seconds) with `+` and `−` controls.
+- **Top Panel Indicator**: Real-time countdown display with state icons (pure white Adwaita styling).
+- **Flexible Panel Placement**: Choose between `Left (after Spaces)`, `Middle-Left (left of Clock)`, `Middle-Right (right of Clock)`, or `Right (after system monitors)`.
+- **GNOME Clocks Style Time Picker**: Sleek 3-column picker (Hours : Minutes : Seconds) with `+` and `−` controls and full direct keyboard input.
 - **Quick Presets**: 4 quick preset buttons in the popup menu.
-- **Preferences (Settings Window)**: Click the pen icon next to "Presets" to customize labels, minutes, and seconds for all 4 presets.
+- **Settings & Preferences**:
+  - Click the ⚙️ gear icon at the top of the popup menu to open extension settings.
+  - Choose panel location.
+  - Click the ✏️ pen icon next to "Presets" to customize labels, minutes, and seconds.
 - **Native Notifications & Audio**: Displays a desktop notification and plays a chime when time expires.
-- **No Text Truncation**: Fully formatted display with tabular numerals ensuring seconds are always clearly visible.
+- **Auto-Close on Start**: Automatically closes the menu when starting the countdown.
 
 ---
 
@@ -41,22 +45,22 @@ ln -sfn ~/Desktop/tary_timer ~/.local/share/gnome-shell/extensions/tary-timer@ia
 ### 2. Test the Extension
 
 - **On Wayland (Fedora default)**:
-  - **Option A (Test in nested window without logging out)**:
-    ```bash
-    dbus-run-session -- gnome-shell --nested --wayland
-    ```
-  - **Option B (Logout and login)**:
+  - **Option A (Logout and login)**:
     ```bash
     gnome-session-quit --logout
+    ```
+  - **Option B (Test in nested window without logging out)**:
+    ```bash
+    dbus-run-session -- gnome-shell --nested --wayland
     ```
 - **On X11**:
   Press <kbd>Alt</kbd> + <kbd>F2</kbd>, type `r`, and press <kbd>Enter</kbd>.
 
 ---
 
-### 3. Open Preferences (Presets Editor)
+### 3. Open Preferences (Settings Window)
 
-You can open the Presets settings tab directly by clicking the ✏️ pen icon in the popup menu, or via terminal:
+You can open the settings window directly by clicking the ⚙️ gear icon in the popup menu header, or via terminal:
 
 ```bash
 gnome-extensions prefs tary-timer@iamaymo.github.com
@@ -76,4 +80,3 @@ gnome-extensions disable tary-timer@iamaymo.github.com
 # Check Status
 gnome-extensions info tary-timer@iamaymo.github.com
 ```
-
