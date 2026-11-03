@@ -150,7 +150,7 @@ class TimerIndicator extends PanelMenu.Button {
         controlItem.add_child(controlBox);
         this.menu.addMenuItem(controlItem);
 
-        // 3. GNOME Clocks Style Time Picker (Hours : Minutes : Seconds with +/-)
+        // 3. GNOME Clocks Style Time Picker with Direct Keyboard Input
         const pickerItem = new PopupMenu.PopupBaseMenuItem({
             reactive: false,
             can_focus: false,
@@ -164,7 +164,7 @@ class TimerIndicator extends PanelMenu.Button {
 
         // Hours Column
         const hoursCol = this._createPickerColumn('hours');
-        this._hoursLabel = hoursCol.digitLabel;
+        this._hoursEntry = hoursCol.digitEntry;
 
         // Colon 1
         const colon1 = new St.Label({
@@ -176,7 +176,7 @@ class TimerIndicator extends PanelMenu.Button {
 
         // Minutes Column
         const minutesCol = this._createPickerColumn('minutes');
-        this._minutesLabel = minutesCol.digitLabel;
+        this._minutesEntry = minutesCol.digitEntry;
 
         // Colon 2
         const colon2 = new St.Label({
@@ -188,7 +188,7 @@ class TimerIndicator extends PanelMenu.Button {
 
         // Seconds Column
         const secondsCol = this._createPickerColumn('seconds');
-        this._secondsLabel = secondsCol.digitLabel;
+        this._secondsEntry = secondsCol.digitEntry;
 
         pickerContainer.add_child(hoursCol.box);
         pickerContainer.add_child(colon1);
@@ -277,14 +277,36 @@ class TimerIndicator extends PanelMenu.Button {
             y_align: Clutter.ActorAlign.CENTER,
         });
 
-        const digitLabel = new St.Label({
+        // Editable Entry allowing keyboard input
+        const digitEntry = new St.Entry({
             text: '00',
-            style_class: 'tary-picker-digit-label',
+            style_class: 'tary-picker-digit-entry',
+            can_focus: true,
             x_align: Clutter.ActorAlign.CENTER,
             y_align: Clutter.ActorAlign.CENTER,
         });
-        digitLabel.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
-        digitCard.add_child(digitLabel);
+
+        digitEntry.clutter_text.set_max_length(2);
+        digitEntry.clutter_text.set_x_align(Clutter.ActorAlign.CENTER);
+        digitEntry.clutter_text.set_line_alignment(Pango.Alignment.CENTER);
+        digitEntry.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
+
+        digitEntry.clutter_text.connect('text-changed', () => {
+            if (digitEntry.has_key_focus()) {
+                this._onDigitInputChanged(unit, digitEntry.get_text());
+            }
+        });
+
+        digitEntry.clutter_text.connect('key-focus-out', () => {
+            this._formatDigitEntry(unit);
+        });
+
+        digitEntry.clutter_text.connect('activate', () => {
+            this._formatDigitEntry(unit);
+            this.menu.actor.grab_key_focus();
+        });
+
+        digitCard.add_child(digitEntry);
 
         const minusBtn = new St.Button({
             label: '−',
@@ -298,7 +320,53 @@ class TimerIndicator extends PanelMenu.Button {
         box.add_child(digitCard);
         box.add_child(minusBtn);
 
-        return { box, digitLabel };
+        return { box, digitEntry };
+    }
+
+    _onDigitInputChanged(unit, rawText) {
+        const cleanText = rawText.replace(/[^0-9]/g, '');
+        let val = parseInt(cleanText, 10);
+        if (isNaN(val)) val = 0;
+
+        let h = Math.floor(this._remainingSeconds / 3600);
+        let m = Math.floor((this._remainingSeconds % 3600) / 60);
+        let s = this._remainingSeconds % 60;
+
+        if (unit === 'hours') {
+            h = Math.min(23, Math.max(0, val));
+        } else if (unit === 'minutes') {
+            m = Math.min(59, Math.max(0, val));
+        } else if (unit === 'seconds') {
+            s = Math.min(59, Math.max(0, val));
+        }
+
+        const newTotal = (h * 3600) + (m * 60) + s;
+        this._remainingSeconds = newTotal;
+        this._totalSeconds = newTotal;
+
+        if (this._state === TimerState.FINISHED) {
+            this._state = TimerState.IDLE;
+        }
+
+        const timeStr = formatTime(this._remainingSeconds);
+        this._panelLabel.set_text(timeStr);
+        this._menuTimeLabel.set_text(timeStr);
+    }
+
+    _formatDigitEntry(unit) {
+        const s = Math.max(0, Math.floor(this._remainingSeconds));
+        const hours = Math.floor(s / 3600);
+        const minutes = Math.floor((s % 3600) / 60);
+        const seconds = s % 60;
+        const pad = (n) => n.toString().padStart(2, '0');
+
+        if (unit === 'hours' && this._hoursEntry) {
+            this._hoursEntry.set_text(pad(hours));
+        } else if (unit === 'minutes' && this._minutesEntry) {
+            this._minutesEntry.set_text(pad(minutes));
+        } else if (unit === 'seconds' && this._secondsEntry) {
+            this._secondsEntry.set_text(pad(seconds));
+        }
     }
 
     _onPickerAdjust(unit, delta) {
@@ -371,6 +439,8 @@ class TimerIndicator extends PanelMenu.Button {
             this._pauseTimer();
         } else {
             this._startTimer();
+            // Automatically close the popup window upon starting
+            this.menu.close();
         }
     }
 
@@ -467,7 +537,7 @@ class TimerIndicator extends PanelMenu.Button {
     _updateUI() {
         const timeStr = formatTime(this._remainingSeconds);
 
-        // 1. Update top panel display
+        // 1. Update top panel display (Always white)
         this._panelLabel.set_text(timeStr);
 
         this._panelBox.remove_style_class_name('tary-timer-panel-running');
@@ -490,16 +560,22 @@ class TimerIndicator extends PanelMenu.Button {
         // 2. Update large digital display
         this._menuTimeLabel.set_text(timeStr);
 
-        // 3. Update Clocks picker digits (Hours, Minutes, Seconds)
+        // 3. Update Clocks picker digits only if not currently focused by user
         const s = Math.max(0, Math.floor(this._remainingSeconds));
         const hours = Math.floor(s / 3600);
         const minutes = Math.floor((s % 3600) / 60);
         const seconds = s % 60;
         const pad = (n) => n.toString().padStart(2, '0');
 
-        if (this._hoursLabel) this._hoursLabel.set_text(pad(hours));
-        if (this._minutesLabel) this._minutesLabel.set_text(pad(minutes));
-        if (this._secondsLabel) this._secondsLabel.set_text(pad(seconds));
+        if (this._hoursEntry && !this._hoursEntry.has_key_focus()) {
+            this._hoursEntry.set_text(pad(hours));
+        }
+        if (this._minutesEntry && !this._minutesEntry.has_key_focus()) {
+            this._minutesEntry.set_text(pad(minutes));
+        }
+        if (this._secondsEntry && !this._secondsEntry.has_key_focus()) {
+            this._secondsEntry.set_text(pad(seconds));
+        }
 
         // 4. Update status label & button styling
         switch (this._state) {
@@ -543,7 +619,8 @@ class TimerIndicator extends PanelMenu.Button {
 export default class TaryTimerExtension extends Extension {
     enable() {
         this._indicator = new TimerIndicator(this);
-        Main.panel.addToStatusArea(this.uuid, this._indicator);
+        // Position 1 in 'left' box places the indicator right next to Spaces/Workspaces on the left side
+        Main.panel.addToStatusArea(this.uuid, this._indicator, 1, 'left');
     }
 
     disable() {

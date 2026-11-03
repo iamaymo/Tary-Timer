@@ -1,7 +1,7 @@
 /* Tary Timer GNOME Shell Extension Stylesheet */
 
 /* ==========================================================================
-   Panel Display
+   Panel Display (Always White)
    ========================================================================== */
 .tary-timer-panel-box {
     spacing: 5px;
@@ -10,6 +10,7 @@
 .tary-timer-panel-icon {
     icon-size: 16px;
     margin-right: 2px;
+    color: #ffffff !important;
 }
 
 .tary-timer-panel-label {
@@ -17,22 +18,17 @@
     font-size: 11pt;
     font-variant-numeric: tabular-nums;
     text-align: center;
+    color: #ffffff !important;
 }
 
+/* Ensure panel stays pure white in all states */
 .tary-timer-panel-running .tary-timer-panel-label,
-.tary-timer-panel-running .tary-timer-panel-icon {
-    color: #3584e4;
-}
-
+.tary-timer-panel-running .tary-timer-panel-icon,
 .tary-timer-panel-paused .tary-timer-panel-label,
-.tary-timer-panel-paused .tary-timer-panel-icon {
-    color: #e66100;
-    opacity: 0.85;
-}
-
+.tary-timer-panel-paused .tary-timer-panel-icon,
 .tary-timer-panel-finished .tary-timer-panel-label,
 .tary-timer-panel-finished .tary-timer-panel-icon {
-    color: #e01b24;
+    color: #ffffff !important;
 }
 
 /* ==========================================================================
@@ -100,7 +96,7 @@
 }
 
 /* ==========================================================================
-   GNOME Clocks Style Time Picker
+   GNOME Clocks Style Time Picker (Editable)
    ========================================================================== */
 .tary-picker-container {
     margin: 8px 14px;
@@ -111,7 +107,7 @@
     spacing: 0px;
     background-color: rgba(255, 255, 255, 0.08);
     border-radius: 10px;
-    min-width: 62px;
+    min-width: 64px;
 }
 
 .tary-picker-btn {
@@ -125,7 +121,7 @@
 }
 
 .tary-picker-btn:hover {
-    background-color: rgba(255, 255, 255, 0.12);
+    background-color: rgba(255, 255, 255, 0.14);
 }
 
 .tary-picker-btn-plus {
@@ -141,17 +137,30 @@
 }
 
 .tary-picker-digit-card {
-    padding: 6px 2px;
-    min-width: 60px;
+    padding: 2px 2px;
+    min-width: 62px;
     min-height: 44px;
+    background-color: transparent;
 }
 
-.tary-picker-digit-label {
-    font-size: 24pt;
+.tary-picker-digit-entry {
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+    color: #ffffff;
+    font-size: 22pt;
     font-weight: 800;
     font-variant-numeric: tabular-nums;
     text-align: center;
-    color: #ffffff;
+    min-width: 58px;
+    padding: 2px 0px;
+    selection-background-color: #3584e4;
+    selected-color: #ffffff;
+}
+
+.tary-picker-digit-entry:focus {
+    background-color: rgba(255, 255, 255, 0.12);
+    border-radius: 6px;
 }
 
 .tary-picker-colon {
@@ -159,6 +168,7 @@
     font-weight: 800;
     color: rgba(255, 255, 255, 0.7);
     margin: 0px 3px;
+    text-align: center;
 }
 
 /* ==========================================================================

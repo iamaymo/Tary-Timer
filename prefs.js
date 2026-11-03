@@ -2,33 +2,72 @@ import Adw from 'gi://Adw';
 import Gtk from 'gi://Gtk';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
-import { ExtensionPreferences, gettext as _ } from 'resource:///org/gnome/shell/extensions/extension.js';
-import { loadPresets, savePresets, DEFAULT_PRESETS } from './presetsConfig.js';
+import { ExtensionPreferences, gettext as _ } from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
+import { loadConfig, saveConfig, DEFAULT_CONFIG } from './presetsConfig.js';
+
+const POSITIONS = [
+    { id: 'left', label: 'Left (يسار - بعد مساحات العمل Spaces)' },
+    { id: 'middle-left', label: 'Middle-Left (وسط - يسار الساعة)' },
+    { id: 'middle-right', label: 'Middle-Right (وسط - يمين الساعة)' },
+    { id: 'right', label: 'Right (يمين - بعد مؤشرات النظام والمعالج)' },
+];
 
 export default class TaryTimerPreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
-        window.set_default_size(540, 580);
+        window.set_default_size(560, 640);
 
-        // 1. Preferences Page titled "Presets"
+        let config = loadConfig();
+
+        // 1. Main Preferences Page
         const page = new Adw.PreferencesPage({
-            title: _('Presets'),
+            title: _('Settings'),
             icon_name: 'alarm-symbolic',
         });
         window.add(page);
 
-        // 2. Preferences Group
-        const group = new Adw.PreferencesGroup({
-            title: _('Quick Presets'),
-            description: _('Configure the 4 quick preset buttons shown in the top panel timer menu.'),
+        // ======================================================================
+        // 2. Panel Position Group
+        // ======================================================================
+        const positionGroup = new Adw.PreferencesGroup({
+            title: _('Panel Position'),
+            description: _('Choose the exact location of Tary Timer in the top panel.'),
         });
-        page.add(group);
+        page.add(positionGroup);
 
-        let presets = loadPresets();
-        if (!Array.isArray(presets) || presets.length === 0) {
-            presets = JSON.parse(JSON.stringify(DEFAULT_PRESETS));
-        }
+        const stringList = new Gtk.StringList();
+        POSITIONS.forEach(pos => stringList.append(_(pos.label)));
 
-        // Configure the 4 presets
+        let currentIndex = POSITIONS.findIndex(p => p.id === config.position);
+        if (currentIndex < 0) currentIndex = 0;
+
+        const positionCombo = new Adw.ComboRow({
+            title: _('Position in Top Panel'),
+            subtitle: _('Select panel placement'),
+            model: stringList,
+            selected: currentIndex,
+        });
+
+        positionCombo.connect('notify::selected', () => {
+            const selectedItem = POSITIONS[positionCombo.selected];
+            if (selectedItem) {
+                config.position = selectedItem.id;
+                saveConfig(config);
+            }
+        });
+
+        positionGroup.add(positionCombo);
+
+        // ======================================================================
+        // 3. Quick Presets Group
+        // ======================================================================
+        const presetsGroup = new Adw.PreferencesGroup({
+            title: _('Quick Presets'),
+            description: _('Configure the 4 preset buttons in the popup menu.'),
+        });
+        page.add(presetsGroup);
+
+        let presets = config.presets || [...DEFAULT_CONFIG.presets];
+
         for (let i = 0; i < 4; i++) {
             const preset = presets[i] || {
                 label: `${(i + 1) * 5} min`,
@@ -38,7 +77,7 @@ export default class TaryTimerPreferences extends ExtensionPreferences {
             const expRow = new Adw.ExpanderRow({
                 title: preset.label || `Preset ${i + 1}`,
                 subtitle: `${Math.floor(preset.seconds / 60)} min ${preset.seconds % 60} sec`,
-                expanded: i === 0, // expand first preset by default
+                expanded: i === 0,
             });
 
             // Name / Label Row
@@ -85,7 +124,8 @@ export default class TaryTimerPreferences extends ExtensionPreferences {
                 expRow.set_subtitle(`${newMin} min ${newSec} sec`);
 
                 presets[i] = preset;
-                savePresets(presets);
+                config.presets = presets;
+                saveConfig(config);
             };
 
             nameRow.connect('changed', updatePreset);
@@ -96,16 +136,18 @@ export default class TaryTimerPreferences extends ExtensionPreferences {
             expRow.add_row(minRow);
             expRow.add_row(secRow);
 
-            group.add(expRow);
+            presetsGroup.add(expRow);
         }
 
-        // Reset to Defaults Group
+        // ======================================================================
+        // 4. Reset to Defaults Group
+        // ======================================================================
         const actionGroup = new Adw.PreferencesGroup();
         page.add(actionGroup);
 
         const resetRow = new Adw.ActionRow({
             title: _('Reset to Defaults'),
-            subtitle: _('Restore default 1m, 5m, 10m, and 15m presets'),
+            subtitle: _('Restore default panel position and 1m, 5m, 10m, 15m presets'),
         });
 
         const resetBtn = new Gtk.Button({
@@ -115,7 +157,7 @@ export default class TaryTimerPreferences extends ExtensionPreferences {
         });
 
         resetBtn.connect('clicked', () => {
-            savePresets(DEFAULT_PRESETS);
+            saveConfig(DEFAULT_CONFIG);
             window.close();
         });
 
@@ -123,4 +165,3 @@ export default class TaryTimerPreferences extends ExtensionPreferences {
         actionGroup.add(resetRow);
     }
 }
-
