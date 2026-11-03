@@ -1,3 +1,10 @@
+/**
+ * prefs.js — Preferences window for the Tary Timer GNOME Shell extension.
+ *
+ * Builds the Adwaita settings UI for panel position, preset configuration,
+ * alarm sound selection (including custom audio file browsing), and reset.
+ */
+
 import Adw from 'gi://Adw';
 import Gtk from 'gi://Gtk';
 import Gio from 'gi://Gio';
@@ -5,6 +12,7 @@ import GLib from 'gi://GLib';
 import { ExtensionPreferences, gettext as _ } from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 import { loadConfig, saveConfig, DEFAULT_CONFIG, SOUND_OPTIONS } from './presetsConfig.js';
 
+/** Available panel positions mapped to user-facing labels. */
 const POSITIONS = [
     { id: 'left', label: 'Left' },
     { id: 'middle-left', label: 'Middle-Left' },
@@ -12,6 +20,12 @@ const POSITIONS = [
     { id: 'right', label: 'Right' },
 ];
 
+/**
+ * Plays a preview of the given sound configuration so the user
+ * can hear the selected alarm before committing.
+ *
+ * @param {object|null} soundConfig - The sound configuration to preview.
+ */
 function playSoundPreview(soundConfig) {
     if (!soundConfig || soundConfig.type === 'none') return;
 
@@ -32,13 +46,24 @@ function playSoundPreview(soundConfig) {
     }
 }
 
+/**
+ * TaryTimerPreferences — Adwaita-based preferences window.
+ *
+ * Sections:
+ *   1. Panel Position — combo row to pick left / center / right placement.
+ *   2. Quick Presets  — four expandable rows to customise label & duration.
+ *   3. Alarm Sound    — sound selector with preview and custom file picker.
+ *   4. Reset          — destructive button to restore DEFAULT_CONFIG.
+ */
 export default class TaryTimerPreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
         window.set_default_size(560, 680);
 
         let config = loadConfig();
 
-        // 1. Main Preferences Page
+        // ======================================================================
+        // Section 1: Main Preferences Page
+        // ======================================================================
         const page = new Adw.PreferencesPage({
             title: _('Settings'),
             icon_name: 'alarm-symbolic',
@@ -46,7 +71,7 @@ export default class TaryTimerPreferences extends ExtensionPreferences {
         window.add(page);
 
         // ======================================================================
-        // 2. Panel Position Group
+        // Section 2: Panel Position
         // ======================================================================
         const positionGroup = new Adw.PreferencesGroup({
             title: _('Panel Position'),
@@ -78,7 +103,7 @@ export default class TaryTimerPreferences extends ExtensionPreferences {
         positionGroup.add(positionCombo);
 
         // ======================================================================
-        // 3. Quick Presets Group (All collapsed by default)
+        // Section 3: Quick Presets (all collapsed by default)
         // ======================================================================
         const presetsGroup = new Adw.PreferencesGroup({
             title: _('Quick Presets'),
@@ -94,7 +119,6 @@ export default class TaryTimerPreferences extends ExtensionPreferences {
                 seconds: (i + 1) * 300,
             };
 
-            // All presets collapsed (expanded: false) by default
             const expRow = new Adw.ExpanderRow({
                 title: preset.label || `Preset ${i + 1}`,
                 subtitle: `${Math.floor(preset.seconds / 60)} min ${preset.seconds % 60} sec`,
@@ -161,7 +185,7 @@ export default class TaryTimerPreferences extends ExtensionPreferences {
         }
 
         // ======================================================================
-        // 4. Alarm Sound Group (New 3rd section)
+        // Section 4: Alarm Sound
         // ======================================================================
         const soundGroup = new Adw.PreferencesGroup({
             title: _('Alarm Sound'),
@@ -197,8 +221,9 @@ export default class TaryTimerPreferences extends ExtensionPreferences {
         });
         soundCombo.add_suffix(playBtn);
 
-        // Custom Sound File Row with Browse Picker
+        // Index of the "Custom Sound..." entry in SOUND_OPTIONS
         const customIndex = SOUND_OPTIONS.findIndex(s => s.id === 'custom');
+
         const customRow = new Adw.ActionRow({
             title: _('Custom Audio File'),
             subtitle: config.sound?.customName || config.sound?.customPath || _('No custom file selected'),
@@ -289,7 +314,7 @@ export default class TaryTimerPreferences extends ExtensionPreferences {
         soundGroup.add(customRow);
 
         // ======================================================================
-        // 5. Reset to Defaults Group
+        // Section 5: Reset to Defaults
         // ======================================================================
         const actionGroup = new Adw.PreferencesGroup();
         page.add(actionGroup);

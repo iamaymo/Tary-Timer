@@ -1,3 +1,10 @@
+/**
+ * extension.js — Main entry point for the Tary Timer GNOME Shell extension.
+ *
+ * Provides a panel-bar countdown timer with start/pause/reset controls,
+ * a GNOME-Clocks-style time picker, configurable presets, and alarm sounds.
+ */
+
 import GObject from 'gi://GObject';
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
@@ -10,6 +17,17 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import { Extension, gettext as _ } from 'resource:///org/gnome/shell/extensions/extension.js';
 import { loadConfig, DEFAULT_CONFIG } from './presetsConfig.js';
 
+/** Default timer duration in seconds (5 minutes). */
+const DEFAULT_SECONDS = 300;
+
+/**
+ * Enum-like object representing the possible states of the timer.
+ *
+ * IDLE     → timer is stopped and ready to start.
+ * RUNNING  → countdown is actively ticking.
+ * PAUSED   → countdown is temporarily halted.
+ * FINISHED → countdown reached zero; alarm has fired.
+ */
 const TimerState = {
     IDLE: 'idle',
     RUNNING: 'running',
@@ -17,13 +35,38 @@ const TimerState = {
     FINISHED: 'finished',
 };
 
-function formatTime(totalSeconds) {
-    const s = Math.max(0, Math.floor(totalSeconds));
-    const hours = Math.floor(s / 3600);
-    const minutes = Math.floor((s % 3600) / 60);
-    const seconds = s % 60;
+/**
+ * Zero-pads a number to two digits.
+ *
+ * @param {number} n - The number to pad.
+ * @returns {string} The zero-padded string (e.g. "05").
+ */
+const pad = (n) => n.toString().padStart(2, '0');
 
-    const pad = (n) => n.toString().padStart(2, '0');
+/**
+ * Decomposes a total number of seconds into hours, minutes, and seconds.
+ *
+ * @param {number} totalSeconds - The total seconds to decompose (clamped to ≥ 0).
+ * @returns {{ hours: number, minutes: number, seconds: number }}
+ */
+function decomposeTime(totalSeconds) {
+    const s = Math.max(0, Math.floor(totalSeconds));
+    return {
+        hours: Math.floor(s / 3600),
+        minutes: Math.floor((s % 3600) / 60),
+        seconds: s % 60,
+    };
+}
+
+/**
+ * Formats a total number of seconds into a human-readable time string.
+ * Shows "MM:SS" when under one hour, or "HH:MM:SS" otherwise.
+ *
+ * @param {number} totalSeconds - The total seconds to format.
+ * @returns {string} The formatted time string (e.g. "05:30" or "01:05:30").
+ */
+function formatTime(totalSeconds) {
+    const { hours, minutes, seconds } = decomposeTime(totalSeconds);
 
     if (hours > 0) {
         return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
@@ -31,14 +74,27 @@ function formatTime(totalSeconds) {
     return `${pad(minutes)}:${pad(seconds)}`;
 }
 
+/**
+ * TimerIndicator — The panel button and popup menu for the timer.
+ *
+ * Manages the full timer lifecycle (idle → running → paused → finished),
+ * the time-picker UI, preset buttons, and alarm notifications.
+ */
 const TimerIndicator = GObject.registerClass(
 class TimerIndicator extends PanelMenu.Button {
+
+    /**
+     * Initializes the indicator, builds the UI, and loads user config.
+     *
+     * @param {Extension} extension - The parent extension instance.
+     */
     _init(extension) {
+        // 0.5 = center-aligned menu, 'Tary Timer' = accessible name, false = no auto menu
         super._init(0.5, 'Tary Timer', false);
         this._extension = extension;
 
-        this._totalSeconds = 300; // default 5 minutes
-        this._remainingSeconds = 300;
+        this._totalSeconds = DEFAULT_SECONDS;
+        this._remainingSeconds = DEFAULT_SECONDS;
         this._state = TimerState.IDLE;
         this._timeoutId = null;
         this._endTime = 0;
@@ -60,6 +116,7 @@ class TimerIndicator extends PanelMenu.Button {
         });
     }
 
+    /** Builds the top-panel icon + label widget. */
     _buildPanelWidget() {
         this._panelBox = new St.BoxLayout({
             style_class: 'panel-status-indicators-box tary-timer-panel-box',
@@ -83,8 +140,9 @@ class TimerIndicator extends PanelMenu.Button {
         this.add_child(this._panelBox);
     }
 
+    /** Constructs the full popup menu: header, controls, time picker, and presets. */
     _buildPopupMenu() {
-        // 1. Digital Display Header with Gear Icon on top-right
+        // --- Section 1: Digital Display Header with Gear Icon ---
         const headerItem = new PopupMenu.PopupBaseMenuItem({
             reactive: false,
             can_focus: false,
@@ -151,7 +209,7 @@ class TimerIndicator extends PanelMenu.Button {
         headerItem.add_child(headerRow);
         this.menu.addMenuItem(headerItem);
 
-        // 2. Play / Pause & Reset Controls
+        // --- Section 2: Play / Pause & Reset Controls ---
         const controlItem = new PopupMenu.PopupBaseMenuItem({
             reactive: false,
             can_focus: false,
@@ -186,7 +244,7 @@ class TimerIndicator extends PanelMenu.Button {
         controlItem.add_child(controlBox);
         this.menu.addMenuItem(controlItem);
 
-        // 3. GNOME Clocks Style Time Picker with Direct Keyboard Input
+        // --- Section 3: GNOME Clocks Style Time Picker with Direct Keyboard Input ---
         const pickerItem = new PopupMenu.PopupBaseMenuItem({
             reactive: false,
             can_focus: false,
@@ -202,7 +260,7 @@ class TimerIndicator extends PanelMenu.Button {
         const hoursCol = this._createPickerColumn('hours');
         this._hoursEntry = hoursCol.digitEntry;
 
-        // Colon 1
+        // Colon separator
         const colon1 = new St.Label({
             text: ':',
             style_class: 'tary-picker-colon',
@@ -214,7 +272,7 @@ class TimerIndicator extends PanelMenu.Button {
         const minutesCol = this._createPickerColumn('minutes');
         this._minutesEntry = minutesCol.digitEntry;
 
-        // Colon 2
+        // Colon separator
         const colon2 = new St.Label({
             text: ':',
             style_class: 'tary-picker-colon',
@@ -235,7 +293,7 @@ class TimerIndicator extends PanelMenu.Button {
         pickerItem.add_child(pickerContainer);
         this.menu.addMenuItem(pickerItem);
 
-        // 4. Presets Section Header with Pen/Edit Icon
+        // --- Section 4: Presets Section Header with Edit Icon ---
         const presetsHeaderItem = new PopupMenu.PopupBaseMenuItem({
             reactive: false,
             can_focus: false,
@@ -278,7 +336,7 @@ class TimerIndicator extends PanelMenu.Button {
         presetsHeaderItem.add_child(presetsHeaderBox);
         this.menu.addMenuItem(presetsHeaderItem);
 
-        // 5. Presets Container (First 4 presets only)
+        // --- Section 5: Presets Container (first 4 presets only) ---
         this._presetsContainer = new St.BoxLayout({
             vertical: true,
             x_expand: true,
@@ -292,6 +350,13 @@ class TimerIndicator extends PanelMenu.Button {
         this.menu.addMenuItem(presetsItem);
     }
 
+    /**
+     * Creates a single time-picker column (hours, minutes, or seconds)
+     * with +/− buttons and an editable digit entry.
+     *
+     * @param {'hours'|'minutes'|'seconds'} unit - Which time unit this column controls.
+     * @returns {{ box: St.BoxLayout, digitEntry: St.Entry }}
+     */
     _createPickerColumn(unit) {
         const box = new St.BoxLayout({
             vertical: true,
@@ -371,6 +436,12 @@ class TimerIndicator extends PanelMenu.Button {
         return { box, digitEntry };
     }
 
+    /**
+     * Handles live user input in a picker entry field.
+     * Parses all three digit entries, clamps values, and updates the timer.
+     *
+     * @param {'hours'|'minutes'|'seconds'} unit - The unit being edited (passed through for API symmetry with _commitUserInput).
+     */
     _onUserInput(unit) {
         const hText = this._hoursEntry ? this._hoursEntry.get_text().replace(/\D/g, '') : '';
         const mText = this._minutesEntry ? this._minutesEntry.get_text().replace(/\D/g, '') : '';
@@ -397,14 +468,16 @@ class TimerIndicator extends PanelMenu.Button {
         this._menuTimeLabel.set_text(timeStr);
     }
 
+    /**
+     * Finalizes user input: re-parses the entry values and
+     * writes back the normalized (zero-padded) text into the digit entries.
+     *
+     * @param {'hours'|'minutes'|'seconds'} unit - The unit whose entry to commit.
+     */
     _commitUserInput(unit) {
         this._onUserInput(unit);
 
-        const s = Math.max(0, Math.floor(this._remainingSeconds));
-        const hours = Math.floor(s / 3600);
-        const minutes = Math.floor((s % 3600) / 60);
-        const seconds = s % 60;
-        const pad = (n) => n.toString().padStart(2, '0');
+        const { hours, minutes, seconds } = decomposeTime(this._remainingSeconds);
 
         this._isSyncingUI = true;
         if (this._hoursEntry) this._hoursEntry.set_text(pad(hours));
@@ -413,10 +486,15 @@ class TimerIndicator extends PanelMenu.Button {
         this._isSyncingUI = false;
     }
 
+    /**
+     * Adjusts a specific time unit in the picker by the given delta,
+     * wrapping at boundaries (e.g. 59 → 0 for minutes/seconds).
+     *
+     * @param {'hours'|'minutes'|'seconds'} unit - The time unit to adjust.
+     * @param {number} delta - The amount to add (typically +1 or −1).
+     */
     _onPickerAdjust(unit, delta) {
-        let h = Math.floor(this._remainingSeconds / 3600);
-        let m = Math.floor((this._remainingSeconds % 3600) / 60);
-        let s = this._remainingSeconds % 60;
+        let { hours: h, minutes: m, seconds: s } = decomposeTime(this._remainingSeconds);
 
         if (unit === 'hours') {
             h = (h + delta + 24) % 24;
@@ -439,6 +517,7 @@ class TimerIndicator extends PanelMenu.Button {
         this._updateUI();
     }
 
+    /** Reloads presets from the config file and rebuilds the preset buttons. */
     reloadConfig() {
         this._presetsContainer.destroy_all_children();
 
@@ -473,6 +552,7 @@ class TimerIndicator extends PanelMenu.Button {
         }
     }
 
+    /** Toggles between starting and pausing the timer. */
     _onStartPauseClicked() {
         if (this._state === TimerState.RUNNING) {
             this._pauseTimer();
@@ -482,13 +562,15 @@ class TimerIndicator extends PanelMenu.Button {
         }
     }
 
+    /** Resets the timer to its initial duration. */
     _onResetClicked() {
         this._resetTimer();
     }
 
+    /** Starts (or resumes) the countdown timer. */
     _startTimer() {
         if (this._remainingSeconds <= 0) {
-            this._remainingSeconds = this._totalSeconds > 0 ? this._totalSeconds : 300;
+            this._remainingSeconds = this._totalSeconds > 0 ? this._totalSeconds : DEFAULT_SECONDS;
         }
 
         this._state = TimerState.RUNNING;
@@ -516,6 +598,7 @@ class TimerIndicator extends PanelMenu.Button {
         });
     }
 
+    /** Pauses the running timer, preserving the remaining time. */
     _pauseTimer() {
         if (this._timeoutId) {
             GLib.source_remove(this._timeoutId);
@@ -525,16 +608,22 @@ class TimerIndicator extends PanelMenu.Button {
         this._updateUI();
     }
 
+    /** Resets the timer back to its total duration and returns to IDLE state. */
     _resetTimer() {
         if (this._timeoutId) {
             GLib.source_remove(this._timeoutId);
             this._timeoutId = null;
         }
-        this._remainingSeconds = this._totalSeconds > 0 ? this._totalSeconds : 300;
+        this._remainingSeconds = this._totalSeconds > 0 ? this._totalSeconds : DEFAULT_SECONDS;
         this._state = TimerState.IDLE;
         this._updateUI();
     }
 
+    /**
+     * Applies a preset: stops any running timer and sets the new duration.
+     *
+     * @param {number} seconds - The preset duration in seconds.
+     */
     _setPreset(seconds) {
         if (this._timeoutId) {
             GLib.source_remove(this._timeoutId);
@@ -546,6 +635,7 @@ class TimerIndicator extends PanelMenu.Button {
         this._updateUI();
     }
 
+    /** Transitions the timer to the FINISHED state and triggers notifications. */
     _timerFinished() {
         this._state = TimerState.FINISHED;
         this._remainingSeconds = 0;
@@ -553,6 +643,7 @@ class TimerIndicator extends PanelMenu.Button {
         this._notifyUser();
     }
 
+    /** Sends a desktop notification and plays the alarm sound. */
     _notifyUser() {
         try {
             Main.notify(_('Tary Timer'), _('Time is up! Your timer has ended.'));
@@ -563,6 +654,11 @@ class TimerIndicator extends PanelMenu.Button {
         this._playAlarmSound();
     }
 
+    /**
+     * Plays the configured alarm sound.
+     * Supports theme sounds, file-based sounds, custom user files,
+     * and falls back to a system beep on failure.
+     */
     _playAlarmSound() {
         const config = loadConfig();
         const sound = config.sound || DEFAULT_CONFIG.sound;
@@ -596,14 +692,18 @@ class TimerIndicator extends PanelMenu.Button {
             console.error(`Tary Timer sound playback error: ${e}`);
             try {
                 global.beep();
-            } catch (_) {}
+            } catch (_beepErr) { /* Ignore — last-resort fallback */ }
         }
     }
 
+    /**
+     * Synchronizes all visible UI elements with the current timer state:
+     * panel label/icon, menu display, picker digits, status text, and buttons.
+     */
     _updateUI() {
         const timeStr = formatTime(this._remainingSeconds);
 
-        // 1. Update top panel display (Always white)
+        // Update top panel display
         this._panelLabel.set_text(timeStr);
 
         this._panelBox.remove_style_class_name('tary-timer-panel-running');
@@ -623,16 +723,12 @@ class TimerIndicator extends PanelMenu.Button {
             this._panelIcon.set_icon_name('alarm-symbolic');
         }
 
-        // 2. Update large digital display
+        // Update large digital display in popup
         this._menuTimeLabel.set_text(timeStr);
 
-        // 3. Update Clocks picker digits only if not currently focused by user
+        // Update picker digits (skip if user is actively editing)
         if (!this._isEditing) {
-            const s = Math.max(0, Math.floor(this._remainingSeconds));
-            const hours = Math.floor(s / 3600);
-            const minutes = Math.floor((s % 3600) / 60);
-            const seconds = s % 60;
-            const pad = (n) => n.toString().padStart(2, '0');
+            const { hours, minutes, seconds } = decomposeTime(this._remainingSeconds);
 
             this._isSyncingUI = true;
             if (this._hoursEntry) this._hoursEntry.set_text(pad(hours));
@@ -641,7 +737,7 @@ class TimerIndicator extends PanelMenu.Button {
             this._isSyncingUI = false;
         }
 
-        // 4. Update status label & button styling
+        // Update status label & button styling
         switch (this._state) {
             case TimerState.RUNNING:
                 this._menuStatusLabel.set_text(_('Timer running...'));
@@ -671,6 +767,7 @@ class TimerIndicator extends PanelMenu.Button {
         }
     }
 
+    /** Cleans up the timer timeout source before destruction. */
     destroy() {
         if (this._timeoutId) {
             GLib.source_remove(this._timeoutId);
@@ -680,7 +777,15 @@ class TimerIndicator extends PanelMenu.Button {
     }
 });
 
+/**
+ * TaryTimerExtension — Top-level extension class.
+ *
+ * Manages the indicator lifecycle, panel placement, and
+ * a file monitor for live config reloads.
+ */
 export default class TaryTimerExtension extends Extension {
+
+    /** Enables the extension: creates the indicator, sets position, and starts the config monitor. */
     enable() {
         this._config = loadConfig();
         this._indicator = new TimerIndicator(this);
@@ -706,6 +811,11 @@ export default class TaryTimerExtension extends Extension {
         }
     }
 
+    /**
+     * Moves the indicator to the specified panel position.
+     *
+     * @param {'left'|'middle-left'|'middle-right'|'right'} position - Target panel area.
+     */
     applyPosition(position) {
         if (!this._indicator) return;
 
@@ -744,6 +854,7 @@ export default class TaryTimerExtension extends Extension {
         container.insert_child_at_index(this._indicator, pos);
     }
 
+    /** Handles config file changes: re-reads the config and applies updates. */
     _onConfigChanged() {
         const newConfig = loadConfig();
         if (newConfig.position !== this._config.position) {
@@ -755,6 +866,7 @@ export default class TaryTimerExtension extends Extension {
         }
     }
 
+    /** Disables the extension: stops the file monitor and destroys the indicator. */
     disable() {
         if (this._monitor) {
             this._monitor.cancel();

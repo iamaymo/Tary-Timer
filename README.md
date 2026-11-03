@@ -1,87 +1,113 @@
-# Tary Timer - Modern GNOME Shell Extension
+# ⏱️ Tary Timer
 
-A sleek, modern timer extension for GNOME Shell (45 to 51+) utilizing ESM (ECMAScript Modules) architecture. It places an indicator in the top panel status area with a GNOME Clocks style time picker, presets, custom alarm sounds, and preferences support.
+A modern, sleek countdown timer that lives in your GNOME Shell top panel. Set a duration with the intuitive time picker or one-click presets, and get notified with a customizable alarm sound when your time is up.
 
----
-
-## Features
-
-- **Top Panel Indicator**: Real-time countdown display with state icons (pure white Adwaita styling).
-- **Flexible Panel Placement**: Choose between `Left (after Spaces)`, `Middle-Left (left of Clock)`, `Middle-Right (right of Clock)`, or `Right (after system monitors)`.
-- **GNOME Clocks Style Time Picker**: Sleek 3-column picker (Hours : Minutes : Seconds) with `+` and `−` controls and full direct keyboard input.
-- **Quick Presets**: 4 quick preset buttons in the popup menu.
-- **Customizable Alarm Sounds**:
-  - Curated sound options (Alarm Clock, Complete, Bell, Glass Bell, School Bell, Digital Tone, Sonar, Message).
-  - Ability to pick and add any custom sound file (`.mp3`, `.wav`, `.ogg`, `.oga`, `.flac`) from your computer.
-  - Sound preview button (▶) directly inside the settings window.
-  - Silent / None mode.
-- **Settings & Preferences**:
-  - Click the ⚙️ gear icon at the top of the popup menu to open extension settings.
-  - Choose panel location.
-  - Customize preset labels and timings (all collapsed by default).
-  - Customize alarm sounds.
-- **Auto-Close on Start**: Automatically closes the menu when starting the countdown.
+> **Note:** Tary Timer is currently available **only on GitHub**. It has not yet been published to the [GNOME Extensions website](https://extensions.gnome.org).
 
 ---
 
-## Extension Details
+## ✨ Features
 
-- **UUID**: `tary-timer@iamaymo.github.com`
-- **Supported GNOME Versions**: `45`, `46`, `47`, `48`, `49`, `50`, `51`
-- **Architecture**: Modern GNOME Shell ESM (`resource:///org/gnome/shell/extensions/extension.js`)
+- **Panel Countdown** — Always-visible timer in the top bar with live HH:MM:SS display.
+- **GNOME Clocks-Style Picker** — Adjust hours, minutes, and seconds with +/− buttons or type values directly.
+- **Quick Presets** — Four configurable one-click presets (default: 1, 5, 10, 15 min).
+- **Flexible Panel Placement** — Position the timer on the left, center-left, center-right, or right of the top panel.
+- **Alarm Sounds** — Choose from built-in GNOME theme sounds, system alarm files, or browse for your own custom audio.
+- **Desktop Notification** — Receive a GNOME notification when the timer finishes.
+- **Live Settings Reload** — Config changes apply instantly — no need to restart the extension or log out.
+- **Full Preferences UI** — Native Adwaita settings window for presets, position, sound, and reset.
 
 ---
 
-## Installation & Setup Instructions
+## 📋 Requirements
 
-### 1. Install or Update Extension Link
+- GNOME Shell **45 – 51**
+- GLib, Gio, St, Clutter, Pango (bundled with GNOME)
 
-Run in your terminal:
+---
+
+## 🚀 Installation (Manual)
+
+Since Tary Timer is not yet on the GNOME Extensions website, install it manually from GitHub:
 
 ```bash
-mkdir -p ~/.local/share/gnome-shell/extensions
-ln -sfn ~/Desktop/tary_timer ~/.local/share/gnome-shell/extensions/tary-timer@iamaymo.github.com
+# 1. Clone the repository
+git clone https://github.com/iamaymo/tary_timer.git
+
+# 2. Copy it to the GNOME Shell extensions directory
+cp -r tary_timer ~/.local/share/gnome-shell/extensions/tary-timer@iamaymo.github.com
+
+# 3. Restart GNOME Shell
+#    • On Xorg:  press Alt+F2, type 'r', press Enter
+#    • On Wayland: log out and log back in
+
+# 4. Enable the extension
+gnome-extensions enable tary-timer@iamaymo.github.com
 ```
 
-*(Or copy files: `cp -r ~/Desktop/tary_timer/* ~/.local/share/gnome-shell/extensions/tary-timer@iamaymo.github.com/`)*
+### Updating
+
+To update to the latest version:
+
+```bash
+cd tary_timer
+git pull origin main
+cp -r . ~/.local/share/gnome-shell/extensions/tary-timer@iamaymo.github.com
+```
+
+Then restart GNOME Shell as described above.
 
 ---
 
-### 2. Test the Extension
+## 🎯 Usage
 
-- **On Wayland (Fedora default)**:
-  - **Option A (Logout and login)**:
-    ```bash
-    gnome-session-quit --logout
-    ```
-  - **Option B (Test in nested window without logging out)**:
-    ```bash
-    dbus-run-session -- gnome-shell --nested --wayland
-    ```
-- **On X11**:
-  Press <kbd>Alt</kbd> + <kbd>F2</kbd>, type `r`, and press <kbd>Enter</kbd>.
+1. **Click** the timer icon in the top panel to open the popup menu.
+2. **Set a time** using the +/− picker buttons, or type a value directly into the digit fields.
+3. Press **Start** to begin the countdown. The panel label updates every second.
+4. Press **Pause** to temporarily stop, or **Reset** to return to the original duration.
+5. Use a **Preset** button (e.g. *5 min*) to quickly load a saved duration.
+6. When the timer reaches **00:00**, you'll receive a notification and an alarm sound.
 
----
+### ⚙️ Settings
 
-### 3. Open Preferences (Settings Window)
-
-You can open the settings window directly by clicking the ⚙️ gear icon in the popup menu header, or via terminal:
+Open the preferences window from the **gear icon** (⚙) in the popup menu, or run:
 
 ```bash
 gnome-extensions prefs tary-timer@iamaymo.github.com
 ```
 
+From there you can:
+
+| Setting | Description |
+|---------|-------------|
+| **Panel Position** | Move the timer to left, center-left, center-right, or right. |
+| **Quick Presets** | Rename and change the duration of each of the 4 presets. |
+| **Alarm Sound** | Pick a theme sound, a system alarm file, a custom audio file, or silence. |
+| **Reset to Defaults** | Restore all settings to their original values. |
+
 ---
 
-### 4. Enable / Disable Commands
+## 📁 Project Structure
 
-```bash
-# Enable
-gnome-extensions enable tary-timer@iamaymo.github.com
-
-# Disable
-gnome-extensions disable tary-timer@iamaymo.github.com
-
-# Check Status
-gnome-extensions info tary-timer@iamaymo.github.com
 ```
+tary_timer/
+├── extension.js       # Main extension logic (panel indicator, timer, popup menu)
+├── prefs.js           # Adwaita preferences window
+├── presetsConfig.js   # Config loading, saving, and migration
+├── stylesheet.css     # Custom CSS for the popup menu and panel widget
+├── metadata.json      # Extension metadata (UUID, supported shell versions)
+├── LICENSE            # Project license
+└── README.md          # This file
+```
+
+---
+
+## 📄 License
+
+This project is licensed under the terms of the license included in the [LICENSE](LICENSE) file.
+
+---
+
+## 🤝 Contributing
+
+Contributions, issues, and feature requests are welcome! Feel free to open an [issue](https://github.com/iamaymo/tary_timer/issues) or submit a pull request.

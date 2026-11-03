@@ -95,6 +95,7 @@
     text-align: center;
 }
 
+/* Used in IDLE, PAUSED, and FINISHED states (blue accent) */
 .tary-timer-btn-primary {
     background-color: #3584e4;
     color: #ffffff;
@@ -104,6 +105,7 @@
     background-color: #1c71d8;
 }
 
+/* Used in the RUNNING state (orange accent) */
 .tary-timer-btn-warning {
     background-color: #e66100;
     color: #ffffff;
@@ -113,6 +115,7 @@
     background-color: #c64600;
 }
 
+/* Reset button — subtle background */
 .tary-timer-btn-secondary {
     background-color: rgba(255, 255, 255, 0.1);
 }

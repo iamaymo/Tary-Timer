@@ -1,6 +1,17 @@
+/**
+ * presetsConfig.js — Configuration management for Tary Timer.
+ *
+ * Handles loading, saving, and migrating the user's config file
+ * (position, presets, sound settings) stored in ~/.config/tary-timer/.
+ */
+
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
 
+/**
+ * Default configuration used when no user config file exists
+ * or when the user resets to defaults.
+ */
 export const DEFAULT_CONFIG = {
     position: 'middle-left', // 'middle-left' | 'middle-right' | 'left' | 'right'
     presets: [
@@ -17,8 +28,11 @@ export const DEFAULT_CONFIG = {
     },
 };
 
-export const DEFAULT_PRESETS = DEFAULT_CONFIG.presets;
-
+/**
+ * Available sound options shown in the preferences dropdown.
+ * Each entry describes a sound by its type ('theme', 'file', 'custom', or 'none')
+ * and an optional file path for 'file'-type sounds.
+ */
 export const SOUND_OPTIONS = [
     { id: 'alarm-clock-elapsed', type: 'theme', label: 'Alarm Clock' },
     { id: 'complete', type: 'theme', label: 'Complete' },
@@ -32,6 +46,11 @@ export const SOUND_OPTIONS = [
     { id: 'none', type: 'none', label: 'Silent / None' },
 ];
 
+/**
+ * Returns the filesystem paths used for config storage.
+ *
+ * @returns {{ dir: string, file: string, legacyFile: string }}
+ */
 function getConfigPath() {
     const configDir = GLib.build_filenamev([GLib.get_user_config_dir(), 'tary-timer']);
     return {
@@ -41,13 +60,23 @@ function getConfigPath() {
     };
 }
 
+/**
+ * Loads the user configuration from disk.
+ *
+ * Resolution order:
+ *   1. ~/.config/tary-timer/config.json  (current format)
+ *   2. ~/.config/tary-timer/presets.json  (legacy format — auto-migrated)
+ *   3. DEFAULT_CONFIG (written to disk as a new config.json)
+ *
+ * @returns {object} The merged configuration object.
+ */
 export function loadConfig() {
     const { dir, file, legacyFile } = getConfigPath();
-    const gfile = Gio.File.new_for_path(file);
+    const configFile = Gio.File.new_for_path(file);
 
-    if (gfile.query_exists(null)) {
+    if (configFile.query_exists(null)) {
         try {
-            const [success, contents] = gfile.load_contents(null);
+            const [success, contents] = configFile.load_contents(null);
             if (success) {
                 const decoder = new TextDecoder('utf-8');
                 const data = JSON.parse(decoder.decode(contents));
@@ -55,7 +84,7 @@ export function loadConfig() {
                     position: data.position || DEFAULT_CONFIG.position,
                     presets: Array.isArray(data.presets) && data.presets.length > 0
                         ? data.presets
-                        : [...DEFAULT_PRESETS],
+                        : [...DEFAULT_CONFIG.presets],
                     sound: data.sound || { ...DEFAULT_CONFIG.sound },
                 };
             }
@@ -64,11 +93,11 @@ export function loadConfig() {
         }
     }
 
-    // Check legacy presets.json
-    const gLegacy = Gio.File.new_for_path(legacyFile);
-    if (gLegacy.query_exists(null)) {
+    // Check legacy presets.json and auto-migrate if found
+    const legacyConfigFile = Gio.File.new_for_path(legacyFile);
+    if (legacyConfigFile.query_exists(null)) {
         try {
-            const [success, contents] = gLegacy.load_contents(null);
+            const [success, contents] = legacyConfigFile.load_contents(null);
             if (success) {
                 const decoder = new TextDecoder('utf-8');
                 const data = JSON.parse(decoder.decode(contents));
@@ -87,18 +116,25 @@ export function loadConfig() {
         }
     }
 
-    // Create default config
+    // No existing config found — create default
     saveConfig(DEFAULT_CONFIG);
     return JSON.parse(JSON.stringify(DEFAULT_CONFIG));
 }
 
+/**
+ * Persists the given configuration object to ~/.config/tary-timer/config.json.
+ *
+ * @param {object} config - The configuration to save.
+ * @returns {boolean} `true` on success, `false` on failure.
+ */
 export function saveConfig(config) {
     const { dir, file } = getConfigPath();
     try {
+        // rwxr-xr-x — ensures the config directory is accessible
         GLib.mkdir_with_parents(dir, 0o755);
-        const gfile = Gio.File.new_for_path(file);
+        const configFile = Gio.File.new_for_path(file);
         const jsonText = JSON.stringify(config, null, 2);
-        gfile.replace_contents(
+        configFile.replace_contents(
             jsonText,
             null,
             false,
@@ -110,15 +146,4 @@ export function saveConfig(config) {
         console.error(`Tary Timer: Failed to save config.json: ${e}`);
         return false;
     }
-}
-
-export function loadPresets() {
-    const config = loadConfig();
-    return config.presets;
-}
-
-export function savePresets(presets) {
-    const config = loadConfig();
-    config.presets = presets;
-    return saveConfig(config);
 }
