@@ -3,7 +3,7 @@ import Gtk from 'gi://Gtk';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import { ExtensionPreferences, gettext as _ } from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
-import { loadConfig, saveConfig, DEFAULT_CONFIG } from './presetsConfig.js';
+import { loadConfig, saveConfig, DEFAULT_CONFIG, SOUND_OPTIONS } from './presetsConfig.js';
 
 const POSITIONS = [
     { id: 'left', label: 'Left' },
@@ -12,9 +12,29 @@ const POSITIONS = [
     { id: 'right', label: 'Right' },
 ];
 
+function playSoundPreview(soundConfig) {
+    if (!soundConfig || soundConfig.type === 'none') return;
+
+    if (soundConfig.type === 'custom' && soundConfig.customPath) {
+        GLib.spawn_command_line_async(`pw-play "${soundConfig.customPath}"`);
+        return;
+    }
+
+    const soundOpt = SOUND_OPTIONS.find(s => s.id === soundConfig.id || s.id === soundConfig.themeName);
+    if (soundOpt) {
+        if (soundOpt.type === 'file' && soundOpt.path) {
+            GLib.spawn_command_line_async(`pw-play "${soundOpt.path}"`);
+        } else if (soundOpt.type === 'theme') {
+            GLib.spawn_command_line_async(`canberra-gtk-play -i "${soundOpt.id}"`);
+        }
+    } else {
+        GLib.spawn_command_line_async(`canberra-gtk-play -i alarm-clock-elapsed`);
+    }
+}
+
 export default class TaryTimerPreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
-        window.set_default_size(560, 640);
+        window.set_default_size(560, 680);
 
         let config = loadConfig();
 
@@ -34,17 +54,17 @@ export default class TaryTimerPreferences extends ExtensionPreferences {
         });
         page.add(positionGroup);
 
-        const stringList = new Gtk.StringList();
-        POSITIONS.forEach(pos => stringList.append(_(pos.label)));
+        const positionStrings = new Gtk.StringList();
+        POSITIONS.forEach(pos => positionStrings.append(_(pos.label)));
 
-        let currentIndex = POSITIONS.findIndex(p => p.id === config.position);
-        if (currentIndex < 0) currentIndex = 0;
+        let currentPosIndex = POSITIONS.findIndex(p => p.id === config.position);
+        if (currentPosIndex < 0) currentPosIndex = 0;
 
         const positionCombo = new Adw.ComboRow({
             title: _('Position in Top Panel'),
             subtitle: _('Select panel placement'),
-            model: stringList,
-            selected: currentIndex,
+            model: positionStrings,
+            selected: currentPosIndex,
         });
 
         positionCombo.connect('notify::selected', () => {
@@ -58,7 +78,7 @@ export default class TaryTimerPreferences extends ExtensionPreferences {
         positionGroup.add(positionCombo);
 
         // ======================================================================
-        // 3. Quick Presets Group
+        // 3. Quick Presets Group (All collapsed by default)
         // ======================================================================
         const presetsGroup = new Adw.PreferencesGroup({
             title: _('Quick Presets'),
@@ -74,10 +94,11 @@ export default class TaryTimerPreferences extends ExtensionPreferences {
                 seconds: (i + 1) * 300,
             };
 
+            // All presets collapsed (expanded: false) by default
             const expRow = new Adw.ExpanderRow({
                 title: preset.label || `Preset ${i + 1}`,
                 subtitle: `${Math.floor(preset.seconds / 60)} min ${preset.seconds % 60} sec`,
-                expanded: i === 0,
+                expanded: false,
             });
 
             // Name / Label Row
@@ -140,14 +161,142 @@ export default class TaryTimerPreferences extends ExtensionPreferences {
         }
 
         // ======================================================================
-        // 4. Reset to Defaults Group
+        // 4. Alarm Sound Group (New 3rd section)
+        // ======================================================================
+        const soundGroup = new Adw.PreferencesGroup({
+            title: _('Alarm Sound'),
+            description: _('Choose or add a sound when the timer finishes.'),
+        });
+        page.add(soundGroup);
+
+        const soundStrings = new Gtk.StringList();
+        SOUND_OPTIONS.forEach(s => soundStrings.append(_(s.label)));
+
+        // Determine currently selected sound index
+        let curSoundId = config.sound?.customPath ? 'custom' : (config.sound?.themeName || 'alarm-clock-elapsed');
+        if (config.sound?.type === 'none') curSoundId = 'none';
+
+        let curSoundIdx = SOUND_OPTIONS.findIndex(s => s.id === curSoundId);
+        if (curSoundIdx < 0) curSoundIdx = 0;
+
+        const soundCombo = new Adw.ComboRow({
+            title: _('Sound Effect'),
+            subtitle: _('Select audio alert'),
+            model: soundStrings,
+            selected: curSoundIdx,
+        });
+
+        // Test/Preview Play Button
+        const playBtn = new Gtk.Button({
+            icon_name: 'media-playback-start-symbolic',
+            valign: Gtk.Align.CENTER,
+            tooltip_text: _('Preview Sound'),
+        });
+        playBtn.connect('clicked', () => {
+            playSoundPreview(config.sound);
+        });
+        soundCombo.add_suffix(playBtn);
+
+        // Custom Sound File Row with Browse Picker
+        const customIndex = SOUND_OPTIONS.findIndex(s => s.id === 'custom');
+        const customRow = new Adw.ActionRow({
+            title: _('Custom Audio File'),
+            subtitle: config.sound?.customName || config.sound?.customPath || _('No custom file selected'),
+        });
+
+        const browseBtn = new Gtk.Button({
+            label: _('Browse...'),
+            valign: Gtk.Align.CENTER,
+        });
+
+        const fileDialog = new Gtk.FileDialog({
+            title: _('Select Custom Sound File'),
+        });
+        const filter = new Gtk.FileFilter();
+        filter.set_name(_('Audio Files (*.mp3, *.ogg, *.oga, *.wav, *.flac)'));
+        filter.add_mime_type('audio/*');
+        filter.add_pattern('*.mp3');
+        filter.add_pattern('*.ogg');
+        filter.add_pattern('*.oga');
+        filter.add_pattern('*.wav');
+        filter.add_pattern('*.flac');
+
+        const filters = new Gio.ListStore({ item_type: Gtk.FileFilter });
+        filters.append(filter);
+        fileDialog.set_filters(filters);
+
+        browseBtn.connect('clicked', () => {
+            fileDialog.open(window, null, (dlg, res) => {
+                try {
+                    const file = dlg.open_finish(res);
+                    if (file) {
+                        const path = file.get_path();
+                        const name = file.get_basename();
+                        config.sound = {
+                            type: 'custom',
+                            themeName: 'custom',
+                            customPath: path,
+                            customName: name,
+                        };
+                        saveConfig(config);
+
+                        customRow.set_subtitle(name || path);
+                        soundCombo.set_selected(customIndex);
+                        playSoundPreview(config.sound);
+                    }
+                } catch (e) {
+                    // Dialog cancelled by user
+                }
+            });
+        });
+
+        customRow.add_suffix(browseBtn);
+
+        soundCombo.connect('notify::selected', () => {
+            const selectedOpt = SOUND_OPTIONS[soundCombo.selected];
+            if (!selectedOpt) return;
+
+            if (selectedOpt.id === 'custom') {
+                if (!config.sound?.customPath) {
+                    // Prompt user to pick file if none chosen yet
+                    browseBtn.emit('clicked');
+                } else {
+                    config.sound.type = 'custom';
+                    saveConfig(config);
+                    playSoundPreview(config.sound);
+                }
+            } else if (selectedOpt.id === 'none') {
+                config.sound = {
+                    type: 'none',
+                    themeName: 'none',
+                    customPath: '',
+                    customName: '',
+                };
+                saveConfig(config);
+            } else {
+                config.sound = {
+                    type: selectedOpt.type,
+                    themeName: selectedOpt.id,
+                    customPath: selectedOpt.path || '',
+                    customName: '',
+                };
+                saveConfig(config);
+                playSoundPreview(config.sound);
+            }
+        });
+
+        soundGroup.add(soundCombo);
+        soundGroup.add(customRow);
+
+        // ======================================================================
+        // 5. Reset to Defaults Group
         // ======================================================================
         const actionGroup = new Adw.PreferencesGroup();
         page.add(actionGroup);
 
         const resetRow = new Adw.ActionRow({
             title: _('Reset to Defaults'),
-            subtitle: _('Restore default panel position and 1m, 5m, 10m, 15m presets'),
+            subtitle: _('Restore default settings, panel placement, and presets'),
         });
 
         const resetBtn = new Gtk.Button({

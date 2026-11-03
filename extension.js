@@ -560,12 +560,40 @@ class TimerIndicator extends PanelMenu.Button {
             console.error(`Tary Timer notification error: ${e}`);
         }
 
+        this._playAlarmSound();
+    }
+
+    _playAlarmSound() {
+        const config = loadConfig();
+        const sound = config.sound || DEFAULT_CONFIG.sound;
+
+        if (!sound || sound.type === 'none') {
+            return;
+        }
+
         try {
+            if ((sound.type === 'custom' || sound.type === 'file') && sound.customPath) {
+                const file = Gio.File.new_for_path(sound.customPath);
+                if (file.query_exists(null)) {
+                    const player = global.display.get_sound_player();
+                    if (player && typeof player.play_from_file === 'function') {
+                        player.play_from_file(file, _('Timer Finished'), null);
+                        return;
+                    }
+                    GLib.spawn_command_line_async(`pw-play "${sound.customPath}"`);
+                    return;
+                }
+            }
+
+            const themeName = sound.themeName || 'alarm-clock-elapsed';
             const player = global.display.get_sound_player();
             if (player) {
-                player.play_from_theme('alarm-clock-elapsed', _('Timer Finished'), null);
+                player.play_from_theme(themeName, _('Timer Finished'), null);
+            } else {
+                GLib.spawn_command_line_async(`canberra-gtk-play -i "${themeName}"`);
             }
         } catch (e) {
+            console.error(`Tary Timer sound playback error: ${e}`);
             try {
                 global.beep();
             } catch (_) {}

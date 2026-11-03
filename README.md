@@ -1,6 +1,6 @@
 # Tary Timer - Modern GNOME Shell Extension
 
-A sleek, modern timer extension for GNOME Shell (45 to 51+) utilizing ESM (ECMAScript Modules) architecture. It places an indicator in the top panel status area with a GNOME Clocks style time picker, presets, and preferences support.
+A sleek, modern timer extension for GNOME Shell (45 to 51+) utilizing ESM (ECMAScript Modules) architecture. It places an indicator in the top panel status area with a GNOME Clocks style time picker, presets, custom alarm sounds, and preferences support.
 
 ---
 
@@ -10,11 +10,16 @@ A sleek, modern timer extension for GNOME Shell (45 to 51+) utilizing ESM (ECMAS
 - **Flexible Panel Placement**: Choose between `Left (after Spaces)`, `Middle-Left (left of Clock)`, `Middle-Right (right of Clock)`, or `Right (after system monitors)`.
 - **GNOME Clocks Style Time Picker**: Sleek 3-column picker (Hours : Minutes : Seconds) with `+` and `−` controls and full direct keyboard input.
 - **Quick Presets**: 4 quick preset buttons in the popup menu.
+- **Customizable Alarm Sounds**:
+  - Curated sound options (Alarm Clock, Complete, Bell, Glass Bell, School Bell, Digital Tone, Sonar, Message).
+  - Ability to pick and add any custom sound file (`.mp3`, `.wav`, `.ogg`, `.oga`, `.flac`) from your computer.
+  - Sound preview button (▶) directly inside the settings window.
+  - Silent / None mode.
 - **Settings & Preferences**:
   - Click the ⚙️ gear icon at the top of the popup menu to open extension settings.
   - Choose panel location.
-  - Click the ✏️ pen icon next to "Presets" to customize labels, minutes, and seconds.
-- **Native Notifications & Audio**: Displays a desktop notification and plays a chime when time expires.
+  - Customize preset labels and timings (all collapsed by default).
+  - Customize alarm sounds.
 - **Auto-Close on Start**: Automatically closes the menu when starting the countdown.
 
 ---

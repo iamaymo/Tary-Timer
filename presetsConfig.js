@@ -2,16 +2,35 @@ import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
 
 export const DEFAULT_CONFIG = {
-    position: 'middle-left', // 'middle-left' | 'middle-right' | 'left' | 'right'
+    position: 'left', // 'middle-left' | 'middle-right' | 'left' | 'right'
     presets: [
         { label: '1 min', seconds: 60 },
         { label: '5 min', seconds: 300 },
         { label: '10 min', seconds: 600 },
         { label: '15 min', seconds: 900 },
     ],
+    sound: {
+        type: 'theme', // 'theme' | 'custom' | 'none'
+        themeName: 'alarm-clock-elapsed',
+        customPath: '',
+        customName: '',
+    },
 };
 
 export const DEFAULT_PRESETS = DEFAULT_CONFIG.presets;
+
+export const SOUND_OPTIONS = [
+    { id: 'alarm-clock-elapsed', type: 'theme', label: 'Alarm Clock' },
+    { id: 'complete', type: 'theme', label: 'Complete' },
+    { id: 'bell', type: 'theme', label: 'Bell' },
+    { id: 'glass-bell', type: 'file', path: '/usr/share/sounds/gnome/default/alarms/glass-bell.oga', label: 'Glass Bell' },
+    { id: 'school-bell', type: 'file', path: '/usr/share/sounds/gnome/default/alarms/school-bell.oga', label: 'School Bell' },
+    { id: 'digitone', type: 'file', path: '/usr/share/sounds/gnome/default/alarms/digitone.oga', label: 'Digital Chime' },
+    { id: 'sonar', type: 'file', path: '/usr/share/sounds/gnome/default/alarms/sonar.oga', label: 'Sonar' },
+    { id: 'message-new-instant', type: 'theme', label: 'Message Notification' },
+    { id: 'custom', type: 'custom', label: 'Custom Sound...' },
+    { id: 'none', type: 'none', label: 'Silent / None' },
+];
 
 function getConfigPath() {
     const configDir = GLib.build_filenamev([GLib.get_user_config_dir(), 'tary-timer']);
@@ -37,6 +56,7 @@ export function loadConfig() {
                     presets: Array.isArray(data.presets) && data.presets.length > 0
                         ? data.presets
                         : [...DEFAULT_PRESETS],
+                    sound: data.sound || { ...DEFAULT_CONFIG.sound },
                 };
             }
         } catch (e) {
@@ -44,7 +64,7 @@ export function loadConfig() {
         }
     }
 
-    // Check legacy presets.json if config.json does not exist
+    // Check legacy presets.json
     const gLegacy = Gio.File.new_for_path(legacyFile);
     if (gLegacy.query_exists(null)) {
         try {
@@ -56,6 +76,7 @@ export function loadConfig() {
                     const cfg = {
                         position: DEFAULT_CONFIG.position,
                         presets: data,
+                        sound: { ...DEFAULT_CONFIG.sound },
                     };
                     saveConfig(cfg);
                     return cfg;
